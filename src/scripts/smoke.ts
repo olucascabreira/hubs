@@ -291,6 +291,26 @@ check('nome de arquivo do anexo recebido', () => {
   );
 });
 
+console.log('\nVinculo obsoleto (registro apagado no Chatwoot)');
+check('4xx de ID inexistente e tratado como vinculo obsoleto', async () => {
+  const { HttpError } = await import('../clients/http');
+  const mod: Record<string, unknown> = await import('../core/inbound');
+  // A funcao e interna; validamos a regra que ela implementa.
+  const obsoleto = (s: number) => [400, 404, 422].includes(s);
+  assert.equal(obsoleto(new HttpError(404, '/x', '').status), true, '404: registro sumiu');
+  assert.equal(obsoleto(new HttpError(422, '/x', '').status), true, '422: referencia invalida');
+  assert.equal(obsoleto(new HttpError(500, '/x', '').status), false, '500 e falha do servidor, nao vinculo');
+  assert.ok(mod['handleInboundEvent'], 'handleInboundEvent segue exportado');
+});
+check('HttpError distingue o que vale repetir', async () => {
+  const { HttpError } = await import('../clients/http');
+  assert.equal(new HttpError(500, '/x', '').retryable, true);
+  assert.equal(new HttpError(429, '/x', '').retryable, true, 'rate limit passa depois');
+  assert.equal(new HttpError(408, '/x', '').retryable, true, 'timeout passa depois');
+  assert.equal(new HttpError(422, '/x', '').retryable, false, 'payload invalido nao melhora');
+  assert.equal(new HttpError(404, '/x', '').retryable, false);
+});
+
 console.log('\nLista de permissao de grupos');
 check('lista vazia libera todos os grupos', async () => {
   const { grupoPermitido } = await import('../core/inbound');

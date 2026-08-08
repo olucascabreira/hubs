@@ -187,6 +187,10 @@ export async function upsertContactLink(link: ContactLink): Promise<ContactLink>
   return row!;
 }
 
+export async function dropContactLink(tenantId: string, waJid: string): Promise<void> {
+  await query('DELETE FROM contact_links WHERE tenant_id = $1 AND wa_jid = $2', [tenantId, waJid]);
+}
+
 /* --------------------------- conversation links -------------------------- */
 
 export async function getConversationLink(

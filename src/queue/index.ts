@@ -1,4 +1,4 @@
-import { Queue, Worker, type JobsOptions } from 'bullmq';
+import { Queue, Worker, UnrecoverableError, type JobsOptions } from 'bullmq';
 import IORedis from 'ioredis';
 import { config } from '../config';
 import { logger } from '../logger';
@@ -49,11 +49,16 @@ async function loadTenant(slug: string) {
   return tenant;
 }
 
-/** Erro 4xx do outro lado nao melhora com retry — falha rapido. */
-function unwrapNonRetryable(err: unknown): never | void {
+/**
+ * Erro 4xx do outro lado nao melhora com retry.
+ *
+ * `UnrecoverableError` marca o job como FALHO sem repetir. A versao anterior
+ * apenas registrava e retornava, e o job era contabilizado como sucesso — uma
+ * mensagem podia desaparecer sem aparecer em `failed` no /health.
+ */
+function classificarErro(err: unknown): never {
   if (err instanceof HttpError && !err.retryable) {
-    logger.error({ err: err.message }, 'erro permanente; job nao sera repetido');
-    return;
+    throw new UnrecoverableError(err.message);
   }
   throw err;
 }
@@ -66,7 +71,7 @@ export function startWorkers(): Worker[] {
       try {
         return await handleInboundEvent(tenant, job.data.payload);
       } catch (err) {
-        return unwrapNonRetryable(err);
+        return classificarErro(err);
       }
     },
     { connection, concurrency: config.INBOUND_CONCURRENCY },
@@ -79,7 +84,7 @@ export function startWorkers(): Worker[] {
       try {
         return await handleOutboundEvent(tenant, job.data.payload);
       } catch (err) {
-        return unwrapNonRetryable(err);
+        return classificarErro(err);
       }
     },
     { connection, concurrency: config.OUTBOUND_CONCURRENCY },

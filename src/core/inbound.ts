@@ -2,7 +2,14 @@ import { config } from '../config';
 import { logger, type Logger } from '../logger';
 import { ChatwootClient, type OutgoingAttachment } from '../clients/chatwoot';
 import { WuzapiClient } from '../clients/wuzapi';
-import { attachChatwootMessageId, claimMessage, type Tenant } from '../db/repo';
+import {
+  attachChatwootMessageId,
+  claimMessage,
+  dropContactLink,
+  dropConversationLink,
+  type Tenant,
+} from '../db/repo';
+import { HttpError } from '../clients/http';
 import { isBroadcastJid, isNewsletterJid, jidToE164, normalizeJid } from './jid';
 import { filenameForInbound } from './media';
 import { normalizeWuzapiEvent, type NormalizedEvent } from './normalize';
@@ -16,6 +23,15 @@ export interface InboundResult {
 }
 
 const skip = (reason: string): InboundResult => ({ status: 'skipped', reason });
+
+/**
+ * Um 404/422 do Chatwoot ao usar um ID em cache quase sempre significa que o
+ * registro foi apagado de la — apagar conversas e contatos e operacao comum
+ * na interface, e o HUB nao e avisado.
+ */
+function vinculoPodeEstarObsoleto(err: unknown): boolean {
+  return err instanceof HttpError && (err.status === 404 || err.status === 422 || err.status === 400);
+}
 
 /**
  * Lista vazia = todos os grupos. Com itens = so os JIDs listados.
@@ -77,8 +93,25 @@ export async function handleInboundEvent(tenant: Tenant, body: unknown): Promise
   const contactJid = event.chatJid;
   const displayName = event.isGroup ? null : event.pushName;
 
-  const contact = await resolveContact(tenant, cw, wuz, contactJid, displayName);
-  const conversationId = await resolveConversation(tenant, cw, contactJid, contact);
+  // Contato e conversa podem ter sido apagados no Chatwoot depois que o
+  // vinculo foi gravado aqui. Nesse caso o ID em cache aponta para nada e o
+  // Chatwoot recusa a operacao. Uma segunda tentativa com o cache limpo
+  // reconstroi tudo, em vez de a mensagem sumir.
+  let contact: Awaited<ReturnType<typeof resolveContact>>;
+  let conversationId: number;
+  try {
+    contact = await resolveContact(tenant, cw, wuz, contactJid, displayName);
+    conversationId = await resolveConversation(tenant, cw, contactJid, contact);
+  } catch (err) {
+    if (!vinculoPodeEstarObsoleto(err)) throw err;
+
+    log.warn({ err, waJid: contactJid }, 'vinculo obsoleto; limpando cache e refazendo');
+    await dropContactLink(tenant.id, contactJid);
+    await dropConversationLink(tenant.id, contactJid);
+
+    contact = await resolveContact(tenant, cw, wuz, contactJid, displayName);
+    conversationId = await resolveConversation(tenant, cw, contactJid, contact);
+  }
 
   const message = await cw.createMessage(conversationId, {
     content: content ?? '',
