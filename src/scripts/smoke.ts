@@ -291,6 +291,22 @@ check('nome de arquivo do anexo recebido', () => {
   );
 });
 
+console.log('\nNome do contato de grupo');
+check('acrescenta o sufixo ao assunto do grupo', async () => {
+  const { comSufixoDeGrupo } = await import('../core/resolve');
+  assert.equal(comSufixoDeGrupo('Vendas Centro'), 'Vendas Centro (Grupo)');
+  assert.equal(comSufixoDeGrupo('  Suporte  '), 'Suporte (Grupo)', 'apara espacos');
+});
+check('nao duplica o sufixo em grupo ja marcado', async () => {
+  const { comSufixoDeGrupo } = await import('../core/resolve');
+  assert.equal(comSufixoDeGrupo('Vendas Centro (Grupo)'), 'Vendas Centro (Grupo)');
+  assert.equal(
+    comSufixoDeGrupo(comSufixoDeGrupo('Financeiro')),
+    'Financeiro (Grupo)',
+    'aplicar duas vezes tem o mesmo resultado',
+  );
+});
+
 console.log('\nCitacao de mensagem (responder)');
 check('citacao do WhatsApp expoe o stanzaId da mensagem original', () => {
   const ev = normalizeWuzapiEvent({

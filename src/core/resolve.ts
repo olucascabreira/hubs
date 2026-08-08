@@ -16,6 +16,18 @@ export function identifierFor(waJid: string): string {
   return `${config.CONTACT_IDENTIFIER_PREFIX}${waJid}`;
 }
 
+/**
+ * Marca o contato como grupo no proprio nome. Sem isso, na lista de conversas
+ * do Chatwoot um grupo e indistinguivel de uma pessoa.
+ */
+export function comSufixoDeGrupo(assunto: string): string {
+  const sufixo = config.GROUP_NAME_SUFFIX;
+  const limpo = assunto.trim();
+  if (!sufixo) return limpo;
+  // Evita "Vendas (Grupo) (Grupo)" quando o assunto ja veio marcado.
+  return limpo.endsWith(sufixo.trim()) ? limpo : `${limpo}${sufixo}`;
+}
+
 export interface ResolvedContact {
   contactId: number;
   sourceId: string;
@@ -38,22 +50,35 @@ export async function resolveContact(
     throw new Error(`Tenant ${tenant.slug} nao tem chatwoot_inbox_id. Rode o provisionamento.`);
   }
 
+  const isGroup = isGroupJid(waJid);
   const cached = await getContactLink(tenant.id, waJid);
+
   if (cached) {
+    // Grupo cadastrado antes do sufixo existir: corrige uma vez, sem
+    // consultar o WhatsApp de novo.
+    const nomeCorrigido =
+      isGroup && cached.display_name ? comSufixoDeGrupo(cached.display_name) : null;
+
     // Nome do WhatsApp pode ter mudado depois do primeiro contato.
-    if (displayName && displayName !== cached.display_name) {
-      await cw.updateContact(cached.chatwoot_contact_id, { name: displayName });
-      await upsertContactLink({ ...cached, display_name: displayName });
+    const novoNome = displayName?.trim() || nomeCorrigido;
+
+    if (novoNome && novoNome !== cached.display_name) {
+      await cw.updateContact(cached.chatwoot_contact_id, { name: novoNome });
+      await upsertContactLink({ ...cached, display_name: novoNome });
     }
     return { contactId: cached.chatwoot_contact_id, sourceId: cached.source_id };
   }
 
   const identifier = identifierFor(waJid);
-  const isGroup = isGroupJid(waJid);
 
-  let name = displayName?.trim() || null;
-  if (!name && isGroup) name = (await wuz.groupName(waJid)) ?? `Grupo ${waJid.split('@')[0]}`;
-  if (!name) name = jidToE164(waJid) ?? waJid;
+  let name: string;
+  if (isGroup) {
+    const assunto =
+      displayName?.trim() || (await wuz.groupName(waJid)) || `Grupo ${waJid.split('@')[0]}`;
+    name = comSufixoDeGrupo(assunto);
+  } else {
+    name = displayName?.trim() || jidToE164(waJid) || waJid;
+  }
 
   const phone = isGroup ? undefined : (jidToE164(waJid) ?? undefined);
 

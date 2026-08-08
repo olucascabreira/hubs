@@ -175,7 +175,8 @@ servir vários inboxes; é a modelagem correta do Chatwoot.
 
 ### Grupos
 
-O grupo vira **um contato** (nome = assunto do grupo, sem telefone). Cada mensagem recebe o prefixo
+O grupo vira **um contato** com o nome Assunto do grupo (Grupo) e sem telefone — o sufixo
+evita confundi-lo com uma pessoa na lista de conversas, e sai de GROUP_NAME_SUFFIX. Cada mensagem recebe o prefixo
 `*Nome do participante*:`, e `content_attributes` guarda o autor real.
 
 Com `handle_groups` ligado e `group_allowlist` vazia, **todos** os grupos viram conversa — numa conta

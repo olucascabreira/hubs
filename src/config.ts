@@ -42,6 +42,10 @@ const schema = z.object({
   DEFAULT_WUZAPI_EVENTS: z.string().default('Message,ReadReceipt'),
 
   CONTACT_IDENTIFIER_PREFIX: z.string().default('wa:'),
+
+  // Sufixo no nome do contato de grupo, para distingui-lo de uma pessoa na
+  // lista de conversas. Deixe vazio para nao acrescentar nada.
+  GROUP_NAME_SUFFIX: z.string().default(' (Grupo)'),
 });
 
 const parsed = schema.safeParse(process.env);
