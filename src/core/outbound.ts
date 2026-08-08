@@ -12,6 +12,7 @@ import {
 } from '../db/repo';
 import { normalizeJid, jidToWuzapiTarget } from './jid';
 import { guessFilename, outboundKindFor, toDataUri, audioSendMode } from './media';
+import { paraNotaDeVoz } from './transcode';
 
 export interface OutboundResult {
   status: 'sent' | 'skipped';
@@ -178,15 +179,28 @@ export async function handleOutboundEvent(tenant: Tenant, body: unknown): Promis
           await wuz.sendVideo({ Phone: phone, Video: dataUri, Caption: caption, Id: waId });
           break;
         case 'audio': {
-          // PTT so para OGG/Opus: mp3 marcado como nota de voz chega quebrado.
-          const ptt = audioSendMode(mimetype) === 'ptt';
-          await wuz.sendAudio({
-            Phone: phone,
-            Audio: dataUri,
-            Id: waId,
-            MimeType: mimetype,
-            PTT: ptt,
-          });
+          const audio = await paraNotaDeVoz(buffer, mimetype);
+          const modo = audio.convertido ? 'ptt' : audioSendMode(audio.mimetype);
+
+          if (modo === 'document') {
+            // Formato que o WhatsApp nao reproduz e que nao foi convertido
+            // (ffmpeg ausente). Como documento ao menos chega e pode ser baixado.
+            log.warn({ mimetype }, 'audio nao convertido e nao reproduzivel; enviando como documento');
+            await wuz.sendDocument({
+              Phone: phone,
+              Document: toDataUri(audio.mimetype, audio.buffer.toString('base64')),
+              FileName: filename,
+              Id: waId,
+            });
+          } else {
+            await wuz.sendAudio({
+              Phone: phone,
+              Audio: toDataUri(audio.mimetype, audio.buffer.toString('base64')),
+              Id: waId,
+              MimeType: audio.mimetype,
+              PTT: modo === 'ptt',
+            });
+          }
           if (caption) await wuz.sendText({ Phone: phone, Body: caption });
           break;
         }

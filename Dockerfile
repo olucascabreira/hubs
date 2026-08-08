@@ -19,6 +19,11 @@ COPY package.json package-lock.json* ./
 RUN npm install --omit=dev --no-audit --no-fund && npm cache clean --force
 COPY --from=build /app/dist ./dist
 
+# ffmpeg converte o audio do Chatwoot para OGG/Opus, unico formato que o
+# WhatsApp aceita como nota de voz. Sem ele o HUB ainda funciona: o audio sai
+# como arquivo comum, so nao como nota de voz.
+RUN apk add --no-cache ffmpeg
+
 RUN addgroup -S hub && adduser -S hub -G hub
 
 # O ponto de montagem do volume nasce pertencendo ao root. Criar o diretorio

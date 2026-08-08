@@ -11,8 +11,19 @@ import { outboundKindFor, filenameForInbound, extensionFor, audioSendMode } from
 import { deterministicWaId, extractChatwootMessage } from '../core/outbound';
 
 let passed = 0;
-function check(label: string, fn: () => void) {
-  fn();
+const pendentes: Array<Promise<void>> = [];
+
+function check(label: string, fn: () => void | Promise<void>) {
+  const resultado = fn();
+  if (resultado instanceof Promise) {
+    pendentes.push(
+      resultado.then(() => {
+        passed += 1;
+        console.log(`  ok  ${label}`);
+      }),
+    );
+    return;
+  }
   passed += 1;
   console.log(`  ok  ${label}`);
 }
@@ -244,9 +255,11 @@ check('roteamento de anexos do Chatwoot para o endpoint certo', () => {
   assert.equal(outboundKindFor('image', 'image/png'), 'image');
   assert.equal(outboundKindFor('image', 'image/webp'), 'document');
   assert.equal(outboundKindFor('video', 'video/mp4'), 'video');
+  // Todo audio entra pelo caminho de audio; o recuo para documento acontece
+  // depois, se a conversao para OGG nao rolar.
   assert.equal(outboundKindFor('audio', 'audio/ogg'), 'audio');
   assert.equal(outboundKindFor('audio', 'audio/mpeg'), 'audio');
-  assert.equal(outboundKindFor('audio', 'audio/wav'), 'document');
+  assert.equal(outboundKindFor('audio', 'audio/wav'), 'audio');
   assert.equal(outboundKindFor('file', 'application/pdf'), 'document');
   assert.equal(outboundKindFor(undefined, 'image/jpeg'), 'image');
 });
@@ -278,6 +291,26 @@ check('nome de arquivo do anexo recebido', () => {
   );
 });
 
+console.log('\nConversao de audio para nota de voz');
+check('OGG ja e nota de voz, nao reconverte', async () => {
+  const { paraNotaDeVoz, jaEhNotaDeVoz } = await import('../core/transcode');
+  assert.equal(jaEhNotaDeVoz('audio/ogg; codecs=opus'), true);
+  assert.equal(jaEhNotaDeVoz('audio/mpeg'), false);
+  const r = await paraNotaDeVoz(Buffer.from('conteudo-ogg'), 'audio/ogg');
+  assert.equal(r.convertido, false, 'nao deve reprocessar o que ja esta certo');
+  assert.equal(r.mimetype, 'audio/ogg; codecs=opus');
+});
+check('entrada invalida nao derruba o envio: devolve o original', async () => {
+  const { paraNotaDeVoz } = await import('../core/transcode');
+  const lixo = Buffer.from('isto nao e audio');
+  const r = await paraNotaDeVoz(lixo, 'audio/mpeg');
+  // Sem ffmpeg (ENOENT) ou com ffmpeg rejeitando a entrada, o resultado e o
+  // mesmo: segue com o original em vez de perder a mensagem.
+  assert.equal(r.convertido, false);
+  assert.equal(r.buffer, lixo);
+  assert.equal(r.mimetype, 'audio/mpeg');
+});
+
 console.log('\nSaida (Chatwoot -> WhatsApp)');
 check('id do WhatsApp e deterministico por mensagem do Chatwoot', () => {
   const a = deterministicWaId('11111111-1111-1111-1111-111111111111', 42, 0);
@@ -298,4 +331,9 @@ check('payload do Chatwoot aninhado em message e achatado', () => {
   assert.ok(flat?.['conversation']);
 });
 
-console.log(`\n${passed} verificacoes passaram.\n`);
+Promise.all(pendentes)
+  .then(() => console.log(`\n${passed} verificacoes passaram.\n`))
+  .catch((err) => {
+    console.error('\nFALHOU:', err);
+    process.exit(1);
+  });

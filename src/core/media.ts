@@ -60,9 +60,10 @@ export function outboundKindFor(fileType: string | undefined, mimetype: string):
     return mime === 'image/webp' ? 'document' : 'image';
   }
   if (fileType === 'video' || mime.startsWith('video/')) return 'video';
-  if (fileType === 'audio' || mime.startsWith('audio/')) {
-    return audioSendMode(mime) === 'document' ? 'document' : 'audio';
-  }
+  // Todo audio entra pelo caminho de audio: com ffmpeg disponivel qualquer
+  // formato vira nota de voz. O recuo para documento acontece la, quando a
+  // conversao nao rola e o formato nao toca no WhatsApp.
+  if (fileType === 'audio' || mime.startsWith('audio/')) return 'audio';
   return 'document';
 }
 
