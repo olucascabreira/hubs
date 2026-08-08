@@ -7,7 +7,7 @@ import assert from 'node:assert/strict';
 
 import { normalizeWuzapiEvent } from '../core/normalize';
 import { normalizeJid, jidToE164, jidToWuzapiTarget, isGroupJid } from '../core/jid';
-import { outboundKindFor, filenameForInbound, extensionFor } from '../core/media';
+import { outboundKindFor, filenameForInbound, extensionFor, audioSendMode } from '../core/media';
 import { deterministicWaId, extractChatwootMessage } from '../core/outbound';
 
 let passed = 0;
@@ -245,9 +245,24 @@ check('roteamento de anexos do Chatwoot para o endpoint certo', () => {
   assert.equal(outboundKindFor('image', 'image/webp'), 'document');
   assert.equal(outboundKindFor('video', 'video/mp4'), 'video');
   assert.equal(outboundKindFor('audio', 'audio/ogg'), 'audio');
+  assert.equal(outboundKindFor('audio', 'audio/mpeg'), 'audio');
   assert.equal(outboundKindFor('audio', 'audio/wav'), 'document');
   assert.equal(outboundKindFor('file', 'application/pdf'), 'document');
   assert.equal(outboundKindFor(undefined, 'image/jpeg'), 'image');
+});
+
+check('PTT so para OGG/Opus — mp3 como nota de voz chega quebrado', () => {
+  // Nota de voz nativa
+  assert.equal(audioSendMode('audio/ogg; codecs=opus'), 'ptt');
+  assert.equal(audioSendMode('audio/opus'), 'ptt');
+  // Audio comum: player, mas NAO nota de voz
+  assert.equal(audioSendMode('audio/mpeg'), 'audio', 'mp3 do Chatwoot nao pode ir como PTT');
+  assert.equal(audioSendMode('audio/mp4'), 'audio');
+  assert.equal(audioSendMode('audio/m4a'), 'audio');
+  // Sem suporte no WhatsApp: vira documento para ao menos poder ser baixado
+  assert.equal(audioSendMode('audio/wav'), 'document');
+  assert.equal(audioSendMode('audio/webm'), 'document');
+  assert.equal(audioSendMode('audio/amr'), 'document');
 });
 check('extensao derivada do mimetype', () => {
   assert.equal(extensionFor('image/jpeg'), 'jpg');

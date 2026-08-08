@@ -11,7 +11,7 @@ import {
   type Tenant,
 } from '../db/repo';
 import { normalizeJid, jidToWuzapiTarget } from './jid';
-import { guessFilename, outboundKindFor, toDataUri, isWhatsappPlayableAudio } from './media';
+import { guessFilename, outboundKindFor, toDataUri, audioSendMode } from './media';
 
 export interface OutboundResult {
   status: 'sent' | 'skipped';
@@ -177,16 +177,19 @@ export async function handleOutboundEvent(tenant: Tenant, body: unknown): Promis
         case 'video':
           await wuz.sendVideo({ Phone: phone, Video: dataUri, Caption: caption, Id: waId });
           break;
-        case 'audio':
+        case 'audio': {
+          // PTT so para OGG/Opus: mp3 marcado como nota de voz chega quebrado.
+          const ptt = audioSendMode(mimetype) === 'ptt';
           await wuz.sendAudio({
             Phone: phone,
             Audio: dataUri,
             Id: waId,
             MimeType: mimetype,
-            PTT: isWhatsappPlayableAudio(mimetype),
+            PTT: ptt,
           });
           if (caption) await wuz.sendText({ Phone: phone, Body: caption });
           break;
+        }
         default:
           await wuz.sendDocument({ Phone: phone, Document: dataUri, FileName: filename, Id: waId });
           if (caption) await wuz.sendText({ Phone: phone, Body: caption });

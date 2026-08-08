@@ -61,14 +61,34 @@ export function outboundKindFor(fileType: string | undefined, mimetype: string):
   }
   if (fileType === 'video' || mime.startsWith('video/')) return 'video';
   if (fileType === 'audio' || mime.startsWith('audio/')) {
-    return isWhatsappPlayableAudio(mime) ? 'audio' : 'document';
+    return audioSendMode(mime) === 'document' ? 'document' : 'audio';
   }
   return 'document';
 }
 
-export function isWhatsappPlayableAudio(mimetype: string): boolean {
+export type AudioMode = 'ptt' | 'audio' | 'document';
+
+/**
+ * Como enviar um audio ao WhatsApp.
+ *
+ * A distincao importa: `PTT` marca a mensagem como NOTA DE VOZ, e nota de voz
+ * so aceita OGG/Opus. Marcar um mp3 como PTT produz uma mensagem que o app
+ * nao reproduz nem permite baixar — falha silenciosa, sem erro no envio.
+ */
+export function audioSendMode(mimetype: string): AudioMode {
   const mime = baseMime(mimetype);
-  return mime === 'audio/ogg' || mime === 'audio/opus' || mime === 'audio/mpeg' || mime === 'audio/mp4';
+
+  // Nota de voz nativa.
+  if (mime === 'audio/ogg' || mime === 'audio/opus') return 'ptt';
+
+  // Audio comum: aparece com player, sem ser nota de voz.
+  if (['audio/mpeg', 'audio/mp3', 'audio/mp4', 'audio/aac', 'audio/m4a', 'audio/x-m4a'].includes(mime)) {
+    return 'audio';
+  }
+
+  // wav, webm, amr e afins: o WhatsApp nao reproduz. Como documento ao menos
+  // chega inteiro e pode ser baixado.
+  return 'document';
 }
 
 export function toDataUri(mimetype: string, base64: string): string {
