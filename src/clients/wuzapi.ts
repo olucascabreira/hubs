@@ -202,6 +202,23 @@ export class WuzapiClient {
     }
   }
 
+  /** Grupos dos quais a conta participa, para montar a lista de permissao. */
+  async listGroups(): Promise<Array<{ jid: string; nome: string; participantes: number }>> {
+    const raw = await this.call<Record<string, unknown>>('/group/list');
+    const lista = (raw?.['Groups'] ?? raw?.['groups'] ?? raw) as unknown;
+    if (!Array.isArray(lista)) return [];
+
+    return lista.map((g) => {
+      const item = (g ?? {}) as Record<string, unknown>;
+      const participantes = item['Participants'] ?? item['participants'];
+      return {
+        jid: String(item['JID'] ?? item['jid'] ?? ''),
+        nome: String(item['Name'] ?? item['name'] ?? '(sem nome)'),
+        participantes: Array.isArray(participantes) ? participantes.length : 0,
+      };
+    }).filter((g) => g.jid);
+  }
+
   async groupName(groupJid: string): Promise<string | null> {
     try {
       const res = await this.call<{ Name?: string; name?: string }>('/group/info', {

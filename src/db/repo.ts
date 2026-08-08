@@ -21,6 +21,8 @@ export interface Tenant {
   mirror_own_messages: boolean;
   reopen_resolved: boolean;
   group_sender_prefix: boolean;
+  /** Vazia = todos os grupos. Com itens = somente esses JIDs. */
+  group_allowlist: string[];
 
   created_at: Date;
   updated_at: Date;
@@ -49,6 +51,7 @@ const TENANT_COLUMNS = `
   chatwoot_base_url, chatwoot_account_id, chatwoot_api_token,
   chatwoot_inbox_id, chatwoot_inbox_identifier, chatwoot_webhook_secret,
   handle_groups, mirror_own_messages, reopen_resolved, group_sender_prefix,
+  group_allowlist,
   created_at, updated_at
 `;
 
@@ -76,6 +79,7 @@ export type TenantInput = {
   mirror_own_messages?: boolean;
   reopen_resolved?: boolean;
   group_sender_prefix?: boolean;
+  group_allowlist?: string[];
 };
 
 export async function createTenant(input: TenantInput): Promise<Tenant> {
@@ -85,9 +89,11 @@ export async function createTenant(input: TenantInput): Promise<Tenant> {
        wuzapi_base_url, wuzapi_token, wuzapi_webhook_secret,
        chatwoot_base_url, chatwoot_account_id, chatwoot_api_token,
        chatwoot_inbox_id, chatwoot_inbox_identifier, chatwoot_webhook_secret,
-       handle_groups, mirror_own_messages, reopen_resolved, group_sender_prefix
+       handle_groups, mirror_own_messages, reopen_resolved, group_sender_prefix,
+       group_allowlist
      ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,
-               COALESCE($12,true), COALESCE($13,true), COALESCE($14,true), COALESCE($15,true))
+               COALESCE($12,true), COALESCE($13,true), COALESCE($14,true), COALESCE($15,true),
+               COALESCE($16,'{}'::text[]))
      RETURNING ${TENANT_COLUMNS}`,
     [
       input.slug,
@@ -105,6 +111,7 @@ export async function createTenant(input: TenantInput): Promise<Tenant> {
       input.mirror_own_messages ?? null,
       input.reopen_resolved ?? null,
       input.group_sender_prefix ?? null,
+      input.group_allowlist ?? null,
     ],
   );
   return row!;
@@ -126,6 +133,7 @@ const UPDATABLE = new Set([
   'mirror_own_messages',
   'reopen_resolved',
   'group_sender_prefix',
+  'group_allowlist',
 ]);
 
 export async function updateTenant(

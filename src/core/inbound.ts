@@ -3,7 +3,7 @@ import { logger, type Logger } from '../logger';
 import { ChatwootClient, type OutgoingAttachment } from '../clients/chatwoot';
 import { WuzapiClient } from '../clients/wuzapi';
 import { attachChatwootMessageId, claimMessage, type Tenant } from '../db/repo';
-import { isBroadcastJid, isNewsletterJid, jidToE164 } from './jid';
+import { isBroadcastJid, isNewsletterJid, jidToE164, normalizeJid } from './jid';
 import { filenameForInbound } from './media';
 import { normalizeWuzapiEvent, type NormalizedEvent } from './normalize';
 import { resolveContact, resolveConversation } from './resolve';
@@ -16,6 +16,21 @@ export interface InboundResult {
 }
 
 const skip = (reason: string): InboundResult => ({ status: 'skipped', reason });
+
+/**
+ * Lista vazia = todos os grupos. Com itens = so os JIDs listados.
+ *
+ * A conta pode participar de dezenas de grupos que nao sao atendimento;
+ * sem o filtro, cada um deles viraria contato e conversa no Chatwoot.
+ */
+export function grupoPermitido(
+  tenant: Pick<Tenant, 'group_allowlist'>,
+  chatJid: string,
+): boolean {
+  const lista = tenant.group_allowlist ?? [];
+  if (lista.length === 0) return true;
+  return lista.some((permitido) => normalizeJid(permitido) === chatJid);
+}
 
 /** WhatsApp -> Chatwoot. Idempotente por (tenant, wa_message_id). */
 export async function handleInboundEvent(tenant: Tenant, body: unknown): Promise<InboundResult> {
@@ -31,6 +46,9 @@ export async function handleInboundEvent(tenant: Tenant, body: unknown): Promise
   if (isNewsletterJid(event.chatJid)) return skip('newsletter ignorada');
   if (event.reaction) return skip('reacao ignorada');
   if (event.isGroup && !tenant.handle_groups) return skip('grupos desabilitados neste tenant');
+  if (event.isGroup && !grupoPermitido(tenant, event.chatJid)) {
+    return skip(`grupo ${event.chatJid} fora da lista de permissao`);
+  }
   if (event.isFromMe && !tenant.mirror_own_messages) return skip('espelhamento de saida desligado');
 
   const direction = event.isFromMe ? 'out' : 'in';

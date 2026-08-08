@@ -83,4 +83,13 @@ export const migrations: Migration[] = [
         ON message_links (tenant_id, chatwoot_message_id);
     `,
   },
+  {
+    name: '002_group_allowlist',
+    sql: /* sql */ `
+      -- Lista de grupos permitidos. Vazia/NULL com handle_groups=true significa
+      -- "todos os grupos"; com itens, so os JIDs listados viram conversa.
+      ALTER TABLE tenants
+        ADD COLUMN IF NOT EXISTS group_allowlist text[] NOT NULL DEFAULT '{}';
+    `,
+  },
 ];

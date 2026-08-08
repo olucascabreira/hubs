@@ -14,6 +14,8 @@ import {
 } from '../db/repo';
 import { requireAdmin } from './security';
 import { captureStats, listCaptures } from '../core/capture';
+import { grupoPermitido } from '../core/inbound';
+import { isGroupJid, normalizeJid } from '../core/jid';
 
 const slugSchema = z
   .string()
@@ -39,6 +41,8 @@ const createSchema = z.object({
   mirror_own_messages: z.boolean().optional(),
   reopen_resolved: z.boolean().optional(),
   group_sender_prefix: z.boolean().optional(),
+  /** Vazia = todos os grupos. Com itens = somente esses JIDs. */
+  group_allowlist: z.array(z.string()).optional(),
 
   /** Cria o inbox no Chatwoot e grava o webhook no WuzAPI logo apos criar. */
   provision: z.boolean().default(true),
@@ -227,6 +231,52 @@ export async function adminRoutes(app: FastifyInstance): Promise<void> {
     const tenant = await getTenantBySlug(req.params.slug);
     if (!tenant) return reply.code(404).send({ error: 'tenant nao encontrado' });
     return new WuzapiClient(tenant).connect(config.defaultWuzapiEvents);
+  });
+
+  /**
+   * Lista os grupos do WhatsApp marcando quais estao liberados. E a partir
+   * daqui que se monta a lista de permissao — os JIDs de grupo nao sao
+   * descobriveis de outro jeito.
+   */
+  app.get<{ Params: { slug: string } }>('/admin/tenants/:slug/groups', async (req, reply) => {
+    const tenant = await getTenantBySlug(req.params.slug);
+    if (!tenant) return reply.code(404).send({ error: 'tenant nao encontrado' });
+
+    const grupos = await new WuzapiClient(tenant).listGroups();
+    const lista = tenant.group_allowlist ?? [];
+
+    return {
+      handle_groups: tenant.handle_groups,
+      modo: lista.length === 0 ? 'todos os grupos' : `somente ${lista.length} grupo(s)`,
+      total: grupos.length,
+      grupos: grupos
+        .map((g) => ({ ...g, permitido: grupoPermitido(tenant, g.jid) }))
+        .sort((a, b) => Number(b.permitido) - Number(a.permitido) || a.nome.localeCompare(b.nome)),
+    };
+  });
+
+  /** Substitui a lista de permissao de grupos. */
+  app.put<{ Params: { slug: string } }>('/admin/tenants/:slug/groups/allowlist', async (req, reply) => {
+    const parsed = z
+      .object({ group_allowlist: z.array(z.string().min(1)) })
+      .safeParse(req.body);
+    if (!parsed.success) {
+      return reply.code(400).send({ error: 'envie { "group_allowlist": ["<jid>@g.us", ...] }' });
+    }
+
+    const jids = parsed.data.group_allowlist.map((j) => normalizeJid(j)).filter(Boolean);
+    const invalidos = jids.filter((j) => !isGroupJid(j));
+    if (invalidos.length) {
+      return reply.code(400).send({ error: 'JIDs que nao sao de grupo', invalidos });
+    }
+
+    const tenant = await updateTenant(req.params.slug, { group_allowlist: jids });
+    if (!tenant) return reply.code(404).send({ error: 'tenant nao encontrado' });
+
+    return {
+      data: publicView(tenant),
+      modo: jids.length === 0 ? 'todos os grupos' : `somente ${jids.length} grupo(s)`,
+    };
   });
 
   /**

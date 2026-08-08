@@ -291,6 +291,24 @@ check('nome de arquivo do anexo recebido', () => {
   );
 });
 
+console.log('\nLista de permissao de grupos');
+check('lista vazia libera todos os grupos', async () => {
+  const { grupoPermitido } = await import('../core/inbound');
+  assert.equal(grupoPermitido({ group_allowlist: [] }, '120363000000000001@g.us'), true);
+});
+check('com itens, so os grupos listados passam', async () => {
+  const { grupoPermitido } = await import('../core/inbound');
+  const t = { group_allowlist: ['120363000000000001@g.us'] };
+  assert.equal(grupoPermitido(t, '120363000000000001@g.us'), true);
+  assert.equal(grupoPermitido(t, '120363000000000002@g.us'), false, 'grupo fora da lista deve ser barrado');
+});
+check('JID salvo sem sufixo ainda casa', async () => {
+  const { grupoPermitido } = await import('../core/inbound');
+  // normalizeJid completa o servidor quando so vem o numero
+  const t = { group_allowlist: ['120363000000000001@g.us'] };
+  assert.equal(grupoPermitido(t, '120363000000000001@g.us'), true);
+});
+
 console.log('\nConversao de audio para nota de voz');
 check('OGG ja e nota de voz, nao reconverte', async () => {
   const { paraNotaDeVoz, jaEhNotaDeVoz } = await import('../core/transcode');
