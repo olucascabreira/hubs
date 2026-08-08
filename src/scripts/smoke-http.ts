@@ -96,6 +96,23 @@ async function main() {
     assert.equal(res.json().error, 'payload invalido');
   });
 
+  console.log('\nPainel /ui');
+  await check('serve HTML sem exigir token', async () => {
+    const res = await app.inject({ method: 'GET', url: '/ui' });
+    assert.equal(res.statusCode, 200);
+    assert.match(res.headers['content-type'] as string, /text\/html/);
+    assert.match(res.body, /HUB WuzAPI/);
+  });
+  await check('nao embute o token nem segredos no HTML', async () => {
+    const res = await app.inject({ method: 'GET', url: '/ui' });
+    assert.ok(!res.body.includes(ADMIN_TOKEN), 'o HTML nao pode conter o ADMIN_TOKEN');
+    assert.ok(!res.body.includes('api_access_token'), 'nem o token do Chatwoot');
+  });
+  await check('pede noindex para nao ser indexado', async () => {
+    const res = await app.inject({ method: 'GET', url: '/ui' });
+    assert.match(String(res.headers['x-robots-tag']), /noindex/);
+  });
+
   console.log('\nRoteamento e parsers');
   await check('rota inexistente responde 404 em JSON', async () => {
     const res = await app.inject({ method: 'GET', url: '/nao-existe' });

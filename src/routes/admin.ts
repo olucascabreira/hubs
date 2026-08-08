@@ -294,9 +294,40 @@ export async function adminRoutes(app: FastifyInstance): Promise<void> {
     },
   );
 
+  /**
+   * QR para parear o WhatsApp. O WuzAPI recusa gerar QR quando a sessao ja
+   * esta ativa, entao respondemos o estado em vez de propagar o erro.
+   */
   app.get<{ Params: { slug: string } }>('/admin/tenants/:slug/qr', async (req, reply) => {
     const tenant = await getTenantBySlug(req.params.slug);
     if (!tenant) return reply.code(404).send({ error: 'tenant nao encontrado' });
-    return new WuzapiClient(tenant).qr();
+
+    const wuz = new WuzapiClient(tenant);
+    const sessao = await wuz.status().catch(() => null);
+
+    if (sessao?.LoggedIn || (sessao as { loggedIn?: boolean } | null)?.loggedIn) {
+      return {
+        estado: 'conectado',
+        mensagem: 'Sessao ja pareada; nao ha QR a exibir.',
+        sessao,
+      };
+    }
+
+    try {
+      const qr = await wuz.qr();
+      const codigo =
+        (qr as { QRCode?: string })?.QRCode ??
+        (qr as unknown as { qrcode?: string })?.qrcode ??
+        '';
+      return { estado: codigo ? 'aguardando_leitura' : 'indisponivel', qrcode: codigo, sessao };
+    } catch (err) {
+      return {
+        estado: 'indisponivel',
+        mensagem:
+          'O WuzAPI nao gerou QR agora. Se a sessao estiver desconectada, chame /connect antes.',
+        detalhe: err instanceof Error ? err.message : String(err),
+        sessao,
+      };
+    }
   });
 }

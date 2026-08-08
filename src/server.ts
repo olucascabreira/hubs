@@ -5,6 +5,7 @@ import { pool } from './db/pool';
 import { connection, inboundQueue, outboundQueue } from './queue';
 import { webhookRoutes } from './routes/webhooks';
 import { adminRoutes } from './routes/admin';
+import { uiRoutes } from './routes/ui';
 
 export async function buildServer(): Promise<FastifyInstance> {
   const app = Fastify({
@@ -102,6 +103,9 @@ export async function buildServer(): Promise<FastifyInstance> {
 
   await app.register(webhookRoutes);
   await app.register(adminRoutes);
+  // Fora do hook de admin: o HTML nao carrega segredo, e as chamadas que ele
+  // faz seguem exigindo o X-Admin-Token.
+  await app.register(uiRoutes);
 
   return app;
 }
