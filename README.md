@@ -38,9 +38,17 @@ código-fonte — funciona, mas exige construir num nó e prender o serviço a e
 
 ### 2. Subir a stack
 
-Portainer → Stacks → Add stack → Web editor → cole [`deploy/stack-template.yml`](deploy/stack-template.yml).
+Portainer → Stacks → Add stack → Web editor. Duas opções, conforme sua infraestrutura:
 
-Em *Environment variables*, cinco obrigatórias:
+| Sua situação | Arquivo |
+|---|---|
+| Já tenho Postgres e Redis | [`deploy/stack-externo.yml`](deploy/stack-externo.yml) |
+| Não tenho, quero tudo junto | [`deploy/stack-template.yml`](deploy/stack-template.yml) |
+
+Usando os seus serviços, crie um banco dedicado antes (não reuse o do Chatwoot) e isole o Redis num
+número de banco próprio — o passo a passo está em [deploy/README.md](deploy/README.md).
+
+Para a stack autossuficiente, as variáveis obrigatórias são cinco:
 
 ```
 HUB_IMAGE=ghcr.io/OWNER/REPO:1.0.0

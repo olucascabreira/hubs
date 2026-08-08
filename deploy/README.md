@@ -1,24 +1,67 @@
-# Deploy em Portainer + Traefik
+# Deploy
 
-## Instalação replicável (recomendada)
+## Qual stack usar
 
-Com a imagem publicada num registry, instalar é colar uma stack — sem copiar código,
-sem construir em nó nenhum, sem `placement`. É o mesmo modelo do Chatwoot.
+| Sua situação | Arquivo |
+|---|---|
+| Já tenho Postgres e Redis na infra | [`stack-externo.yml`](stack-externo.yml) |
+| Não tenho, quero tudo junto | [`stack-template.yml`](stack-template.yml) |
+| Desenvolvimento na minha máquina | [`../docker-compose.yml`](../docker-compose.yml) |
 
-**Uma vez, por quem mantém o projeto:**
+As duas primeiras são para **Docker Swarm + Portainer + Traefik** e usam a imagem publicada num
+registry. Para Docker standalone, mova o bloco `deploy.labels` para `labels` em cada serviço e
+remova o restante de `deploy`.
 
-```bash
-git tag v1.0.0 && git push origin v1.0.0
+---
+
+## Pré-requisitos
+
+- Traefik com um resolver TLS configurado
+- DNS do domínio do HUB apontando para o Traefik
+- A rede externa do Traefik já existente (`docker network ls`)
+- Imagem publicada — veja [Publicar a imagem](#publicar-a-imagem)
+
+---
+
+## Instalação
+
+Portainer → Stacks → Add stack → Web editor → cole a stack escolhida.
+
+Em *Environment variables*, preencha. O editor lê cada linha como `CHAVE=valor` e **não aceita
+comentários nem linhas em branco**.
+
+### Com Postgres e Redis próprios (`stack-externo.yml`)
+
+```
+HUB_IMAGE=ghcr.io/OWNER/REPO:1.0.0
+HUB_DOMAIN=hub.seudominio.com.br
+ADMIN_TOKEN=<openssl rand -hex 32>
+DATABASE_URL=postgres://hub:senha@postgres:5432/hub
+REDIS_URL=redis://redis:6379/3
+TRAEFIK_NETWORK=<docker network ls>
+CERT_RESOLVER=<resolver do seu Traefik>
 ```
 
-O workflow [`publish.yml`](../.github/workflows/publish.yml) roda typecheck e testes, constrói para
-`amd64` e `arm64`, e publica em `ghcr.io/OWNER/REPO` com as tags `1.0.0`, `1.0` e `latest`.
-Se a imagem for privada, cadastre as credenciais em Portainer → Registries.
+Antes, crie o banco — **não reuse o do Chatwoot**:
 
-**Em cada instalação:**
+```sql
+CREATE DATABASE hub;
+CREATE USER hub WITH ENCRYPTED PASSWORD 'trocar';
+GRANT ALL PRIVILEGES ON DATABASE hub TO hub;
+\c hub
+GRANT ALL ON SCHEMA public TO hub;   -- necessário no Postgres 15+
+```
 
-1. Portainer → Stacks → Add stack → Web editor → cole [`stack-template.yml`](stack-template.yml)
-2. Preencha as variáveis:
+Esse último `GRANT` costuma ser esquecido: no Postgres 15+ o schema `public` deixou de ser gravável
+por padrão, e sem ele as migrations falham no boot. As tabelas o HUB cria sozinho.
+
+No Redis, isole em duas camadas: um número de banco próprio na URL (`/3`) e o `REDIS_PREFIX`
+(default `hub`), que separa as chaves do BullMQ das de outras aplicações.
+
+Use o **nome do serviço** nas URLs (`postgres:5432`), não `localhost`. Se Postgres e Redis estiverem
+noutra rede Docker, acrescente-a em `networks` na stack.
+
+### Com tudo junto (`stack-template.yml`)
 
 ```
 HUB_IMAGE=ghcr.io/OWNER/REPO:1.0.0
@@ -29,152 +72,88 @@ TRAEFIK_NETWORK=<docker network ls>
 CERT_RESOLVER=<resolver do seu Traefik>
 ```
 
-3. Deploy. As migrations rodam sozinhas no boot.
-4. Abra `https://HUB_DOMAIN/ui`, informe o `ADMIN_TOKEN` e cadastre a primeira instância.
+---
 
-Requisitos do ambiente: Traefik com um resolver TLS, DNS do `HUB_DOMAIN` apontando para ele, e a
-rede externa do Traefik existente. Postgres e Redis vêm na própria stack — nada a provisionar.
+## Conferir
 
-Prefira a tag de versão (`:1.0.0`) a `:latest`: o Swarm fixa a imagem pelo ID, e uma tag móvel
-torna difícil saber o que está rodando. `GET /health` sempre informa o commit em execução.
+```bash
+curl -s https://hub.seudominio.com.br/health
+```
+
+```json
+{ "status": "ok", "build": "edf5322", "database": "ok", "redis": "ok", "queues": { ... } }
+```
+
+O campo `build` informa o commit em execução — é assim que se confirma que um deploy chegou ao
+serviço. Depois, abra `/ui` para cadastrar a primeira instância.
 
 ---
 
-## Instalação a partir do código-fonte
+## Publicar a imagem
 
-Use quando não houver registry disponível. Exige construir a imagem num nó e prender o serviço a ele.
-
-O HUB entra como mais um serviço ao lado do WuzAPI e do Chatwoot. Sem túnel: o Traefik já resolve
-o hostname público, e a conversa com o WuzAPI acontece pela rede interna do Docker.
-
-```
-                  ┌─────────── rede "proxy" (Traefik) ───────────┐
-  internet ──► Traefik ──► hub.seudominio.com.br ──► HUB :3000
-                  └──────────────────────────────────────────────┘
-                  ┌─────────── rede "apps" ─────────────────────┐
-                     HUB ──► wuzapi:8080      HUB ──► chatwoot:3000
-                  └─────────────────────────────────────────────┘
-                  ┌─────────── rede "hub_internal" ─────────────┐
-                     HUB ──► hub-postgres:5432 / hub-redis:6379
-                  └─────────────────────────────────────────────┘
-```
-
-## Antes de subir: descobrir os nomes das redes
-
-Os dois `external: true` da stack precisam bater com o que já existe no host:
+Uma vez, por quem mantém o projeto:
 
 ```bash
-docker network ls
-
-# em qual(is) rede(s) o WuzAPI está:
-docker inspect $(docker ps -qf name=wuzapi) --format '{{json .NetworkSettings.Networks}}'
-docker inspect $(docker ps -qf name=chatwoot) --format '{{json .NetworkSettings.Networks}}'
+git tag v1.0.0 && git push origin v1.0.0
 ```
 
-Se WuzAPI e Chatwoot estiverem em **redes diferentes**, adicione as duas ao serviço `hub` na stack.
+O workflow [`publish.yml`](../.github/workflows/publish.yml) roda typecheck e testes, constrói para
+`amd64` e `arm64` e publica em `ghcr.io/OWNER/REPO` com as tags `1.0.0`, `1.0` e `latest`.
+Imagem privada? Cadastre as credenciais em Portainer → Registries.
 
-## Variáveis no Portainer
+Prefira a tag de versão a `:latest`: o Swarm fixa a imagem pelo ID resolvido no deploy, e uma tag
+móvel torna difícil saber o que está rodando.
 
-Em *Stacks → Add stack → Environment variables*:
+### Sem registry
 
-| Variável | Exemplo | Nota |
-|---|---|---|
-| `HUB_DOMAIN` | `hub.impulsemidia.com.br` | precisa de DNS apontando para o Traefik |
-| `HUB_PUBLIC_URL` | `https://hub.impulsemidia.com.br` | é essa URL que fica gravada nos dois webhooks |
-| `ADMIN_TOKEN` | (32+ bytes aleatórios) | `openssl rand -hex 32` |
-| `POSTGRES_PASSWORD` | (aleatório) | Postgres próprio do HUB |
-| `TRAEFIK_NETWORK` | `proxy` | nome real da rede do Traefik |
-| `APPS_NETWORK` | `apps` | rede onde WuzAPI/Chatwoot rodam |
-| `CERT_RESOLVER` | `letsencrypt` | nome do resolver no seu Traefik |
-| `DEFAULT_WUZAPI_BASE_URL` | `http://wuzapi:8080` | **nome do serviço**, não a URL pública |
-| `DEFAULT_CHATWOOT_BASE_URL` | `https://chat.impulsemidia.com.br` | |
-| `ADMIN_ALLOWED_IPS` | `203.0.113.4/32` | restringe `/admin/*` por IP |
-| `CAPTURE_RAW_WEBHOOKS` | `true` só na homologação | grava conteúdo de conversas |
-
-## Verificação
+Dá para construir num nó e usar a imagem local, com duas ressalvas: o serviço fica preso a esse nó
+(sem failover) e cada atualização exige repetir o processo.
 
 ```bash
-curl https://hub.seudominio.com.br/health
-```
-
-Deve responder `status: ok` com Postgres e Redis em `ok`. Se `/health` responde mas os webhooks não
-chegam, o problema é rede/DNS entre os contêineres, não o HUB.
-
-## Passo a passo — Swarm multi-nó (use `portainer-stack-swarm.yml`)
-
-O Swarm não constrói imagem, então ela precisa existir antes da stack subir.
-Em multi-nó há duas rotas; a diferença é só se o serviço pode migrar de nó.
-
-### 1. Levar o código para um nó
-
-O repositório vira um arquivo único com `git bundle` (já gerado em `hub.bundle`):
-
-```bash
-# da sua máquina
+# leve o código até um nó do Swarm
 scp hub.bundle usuario@servidor:/opt/
-
-# no servidor
 cd /opt && git clone hub.bundle hub && cd hub
+bash deploy/build-on-node.sh
 ```
 
-Alternativa: `git clone` de um repositório privado seu, se preferir versionar lá.
+O script constrói, marca com `latest` e com o SHA do commit, e aplica no serviço. Na stack, use
+`HUB_IMAGE=wuzapi-chatwoot-hub:latest` e acrescente ao `deploy` do serviço `hub`:
 
-### 2. Construir a imagem
+```yaml
+      placement:
+        constraints:
+          - node.hostname == NOME_DO_NO      # docker node ls
+```
 
-**Rota A — sem registry** (mais rápida, serve para homologação):
+Sem esse constraint o Swarm pode agendar num nó que não tem a imagem, e o serviço trava em
+*"no suitable node"*.
+
+---
+
+## Atualizar
+
+Com registry: troque `HUB_IMAGE` para a nova tag e atualize a stack.
+
+Sem registry, na mesma máquina do build:
 
 ```bash
-cd /opt/hub && chmod +x deploy/build-on-node.sh
-./deploy/build-on-node.sh
+cd /opt/hub && git pull && bash deploy/build-on-node.sh
 ```
 
-O script imprime o `hostname` do nó. A imagem existe **só nele**, então a stack
-precisa de `BUILD_NODE_HOSTNAME=<esse hostname>` — sem isso o Swarm pode agendar
-num nó sem a imagem e o serviço trava em *"no suitable node"*.
+O Swarm fixa a imagem pelo ID no momento do deploy — reconstruir a tag `latest` **não** troca o que
+o serviço executa. Por isso o script usa `docker service update --image ... --no-resolve-image
+--force`. Confirme sempre pelo campo `build` do `/health`.
 
-Custo: o serviço não migra se o nó cair. Aceitável para teste, não para produção.
-
-**Rota B — com registry** (correta para produção):
-
-```bash
-./deploy/build-on-node.sh ghcr.io/SEU_USER/wuzapi-chatwoot-hub:1.0.0
-```
-
-Cadastre as credenciais em Portainer → Registries, use `HUB_IMAGE` com esse
-endereço e **deixe `BUILD_NODE_HOSTNAME` vazio** — qualquer nó serve.
-
-### 3. Subir a stack
-
-Portainer → Stacks → Add stack → Web editor → cole `portainer-stack-swarm.yml`.
-
-Em **Environment variables**, use *Advanced mode* e cole o conteúdo de
-[`stack.env`](stack.env). O parser do Portainer lê cada linha como `CHAVE=valor`
-— **não aceita comentários (`#`) nem linhas em branco**, por isso esse arquivo
-é só pares. A explicação de cada variável está na tabela acima.
-
-Antes de subir, troque `BUILD_NODE_HOSTNAME` pelo hostname do passo 2.
-Deixá-lo vazio gera o constraint `node.hostname == ` e o Swarm rejeita a stack.
-
-### 4. Conferir
-
-```bash
-curl https://hub.impulsemidia.com.br/health
-```
-
-`status: ok` com Postgres e Redis em `ok`. Se travar em *"no suitable node"*,
-revise o `BUILD_NODE_HOSTNAME` do passo 2.
-
-## Outras diferenças do Swarm
-
-1. Labels do Traefik vão para `deploy.labels`, não `labels`.
-2. `depends_on.condition` não é suportado — o HUB tolera Postgres/Redis subindo depois.
+---
 
 ## Rollback
 
-O provisionamento faz exatamente duas escritas fora do HUB:
+O provisionamento faz duas escritas fora do HUB:
 
-1. **Inbox novo no Chatwoot** — apague em Configurações → Caixas de Entrada.
-2. **Webhook do WuzAPI** — `POST /webhook` sobrescreve; para restaurar, grave de volta o valor
-   que a sonda (`probe.ts`) mostrou antes.
+1. **Inbox no Chatwoot** — apague em Configurações → Caixas de Entrada
+2. **Webhook no WuzAPI** — sobrescrito no provisionamento
+
+Excluir a instância pelo painel já remove o webhook do WuzAPI. O inbox é preservado de propósito,
+porque guarda o histórico das conversas.
 
 Derrubar a stack não desfaz nenhuma das duas.
