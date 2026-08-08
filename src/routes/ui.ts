@@ -67,6 +67,9 @@ tr.sel{background:var(--okbg)}
 #qr img{width:270px;height:270px;image-rendering:pixelated;background:#fff;padding:9px;border-radius:8px}
 label.chk{display:flex;gap:9px;align-items:center;padding:7px 9px;border-radius:7px;cursor:pointer}
 label.chk:hover{background:var(--bg)}
+label.fld{display:flex;flex-direction:column;gap:4px;font-size:13px;color:var(--tx2)}
+label.fld input{min-width:0;width:100%}
+label.fld small{font-size:11px}
 </style>
 </head>
 <body>
@@ -99,8 +102,43 @@ label.chk:hover{background:var(--bg)}
         <button id="recarregar">Recarregar</button>
         <button id="provisionar">Reprovisionar</button>
         <button id="conectar">Conectar sessao</button>
+        <span class="sp" style="flex:1"></span>
+        <button class="pri" id="abrirNova">+ Nova instancia</button>
       </div>
       <div class="grid" id="resumo"></div>
+    </div>
+
+    <div class="card hide" id="novaCard">
+      <h2>Nova instancia</h2>
+      <p class="muted">Antes de cadastrar aqui, crie o usuario no WuzAPI e tenha o
+      <strong>token dele</strong> em maos. Ao salvar, o HUB cria um inbox de canal API no
+      Chatwoot e grava o webhook no WuzAPI.</p>
+      <div class="grid" style="grid-template-columns:repeat(auto-fit,minmax(280px,1fr))">
+        <label class="fld">Identificador (slug)
+          <input type="text" id="n_slug" placeholder="loja-centro">
+          <small class="muted">minusculas, numeros e hifen. Vai na URL do webhook.</small></label>
+        <label class="fld">Nome exibido
+          <input type="text" id="n_name" placeholder="Loja Centro - WhatsApp">
+          <small class="muted">Vira o nome do inbox no Chatwoot.</small></label>
+        <label class="fld">URL do WuzAPI
+          <input type="text" id="n_wurl"></label>
+        <label class="fld">Token da instancia WuzAPI
+          <input type="password" id="n_wtok" autocomplete="off"></label>
+        <label class="fld">URL do Chatwoot
+          <input type="text" id="n_curl"></label>
+        <label class="fld">ID da conta no Chatwoot
+          <input type="text" id="n_cacc" placeholder="1"></label>
+        <label class="fld">Token do Chatwoot
+          <input type="password" id="n_ctok" autocomplete="off">
+          <small class="muted">Perfil &rarr; Access Token, de um usuario com acesso a conta.</small></label>
+      </div>
+      <div class="row" style="margin-top:12px">
+        <label class="chk"><input type="checkbox" id="n_grupos"> Atender grupos</label>
+        <span class="sp" style="flex:1"></span>
+        <button id="cancelarNova">Cancelar</button>
+        <button class="pri" id="salvarNova">Criar e provisionar</button>
+      </div>
+      <div id="novaResultado"></div>
     </div>
 
     <div class="card" id="qrcard">
@@ -363,6 +401,57 @@ label.chk:hover{background:var(--bg)}
     }).catch(function(e){ $('capturas').innerHTML = '<p class="muted">' + esc(e.message) + '</p>'; });
   }
 
+  /* --------------------------- nova instancia ---------------------------- */
+
+  function abrirNova(){
+    $('novaCard').classList.remove('hide');
+    $('novaResultado').innerHTML = '';
+    api('/admin/config').then(function(c){
+      if (!$('n_wurl').value) $('n_wurl').value = c.default_wuzapi_base_url || '';
+      if (!$('n_curl').value) $('n_curl').value = c.default_chatwoot_base_url || '';
+    }).catch(function(){});
+    $('novaCard').scrollIntoView({ behavior:'smooth', block:'start' });
+  }
+
+  function salvarNova(){
+    var corpo = {
+      slug: $('n_slug').value.trim(),
+      name: $('n_name').value.trim(),
+      wuzapi_base_url: $('n_wurl').value.trim(),
+      wuzapi_token: $('n_wtok').value,
+      chatwoot_base_url: $('n_curl').value.trim(),
+      chatwoot_account_id: Number($('n_cacc').value.trim()),
+      chatwoot_api_token: $('n_ctok').value,
+      handle_groups: $('n_grupos').checked,
+      provision: true
+    };
+    if (!corpo.slug || !corpo.name || !corpo.wuzapi_token || !corpo.chatwoot_api_token || !corpo.chatwoot_account_id) {
+      return toast('Preencha todos os campos.', true);
+    }
+
+    $('salvarNova').disabled = true;
+    api('/admin/tenants', { method:'POST', body: corpo }).then(function(r){
+      var t = r.tenant || r.data || {};
+      var w = r.webhooks || t.webhooks || {};
+      var falha = r.provision_error;
+      $('novaResultado').innerHTML =
+        '<div class="grid" style="margin-top:14px">' +
+        kv('Instancia', esc(t.slug || corpo.slug)) +
+        kv('Inbox Chatwoot', t.chatwoot_inbox_id ? ('#' + esc(t.chatwoot_inbox_id) + ' ' + tag('criado','ok')) : tag('nao criado','er')) +
+        kv('Webhook WuzAPI', falha ? tag('falhou','er') : tag('configurado','ok')) +
+        '</div>' +
+        (falha ? '<p class="mono" style="color:var(--er)">' + esc(falha) + '</p>' : '') +
+        '<p class="muted mono">' + esc(w.wuzapi || '') + '</p>';
+
+      toast(falha ? 'Criada, mas o provisionamento falhou.' : 'Instancia criada e provisionada.', !!falha);
+      ['n_slug','n_name','n_wtok','n_ctok','n_cacc'].forEach(function(id){ $(id).value = ''; });
+      slug = corpo.slug;
+      listarTenants().then(function(){ $('tenants').value = slug; detalhes(); });
+    }).catch(function(e){
+      toast('Falhou: ' + e.message, true);
+    }).finally(function(){ $('salvarNova').disabled = false; });
+  }
+
   /* -------------------------------- eventos ------------------------------ */
 
   function iniciar(){
@@ -382,6 +471,9 @@ label.chk:hover{background:var(--bg)}
   $('salvarGrupos').addEventListener('click', salvarGrupos);
   $('limparGrupos').addEventListener('click', function(){ selecionados = {}; pintarGrupos(); });
   $('carregarCap').addEventListener('click', carregarCap);
+  $('abrirNova').addEventListener('click', abrirNova);
+  $('salvarNova').addEventListener('click', salvarNova);
+  $('cancelarNova').addEventListener('click', function(){ $('novaCard').classList.add('hide'); });
 
   $('provisionar').addEventListener('click', function(){
     if (!confirm('Reprovisionar grava o webhook no WuzAPI e ajusta o inbox no Chatwoot. Continuar?')) return;

@@ -123,6 +123,14 @@ export async function adminRoutes(app: FastifyInstance): Promise<void> {
     }
   });
 
+  /** Defaults nao-secretos, para o painel pre-preencher o cadastro. */
+  app.get('/admin/config', async () => ({
+    public_url: config.publicUrl,
+    default_wuzapi_base_url: config.DEFAULT_WUZAPI_BASE_URL ?? '',
+    default_chatwoot_base_url: config.DEFAULT_CHATWOOT_BASE_URL ?? '',
+    default_wuzapi_events: config.defaultWuzapiEvents,
+  }));
+
   app.get('/admin/tenants', async () => {
     const tenants = await listTenants();
     return { data: tenants.map(publicView) };
