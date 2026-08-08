@@ -7,6 +7,8 @@ import {
   attachChatwootMessageId,
   claimMessage,
   findWaMessageIdByChatwootId,
+  findQuoteTargetByChatwootId,
+  findQuoteTargetByWaId,
   getConversationLinkByChatwootId,
   type Tenant,
 } from '../db/repo';
@@ -94,6 +96,52 @@ async function resolveTargetJid(tenant: Tenant, message: Dict): Promise<string |
   return null;
 }
 
+export interface ContextInfoCitacao {
+  StanzaId: string;
+  Participant: string;
+}
+
+/**
+ * Traduz "responder mensagem" do Chatwoot para a citação do WhatsApp.
+ *
+ * O Chatwoot identifica o alvo de duas formas, conforme a versão: pelo id
+ * interno da mensagem (`in_reply_to`) ou pelo id externo, que é o próprio
+ * stanza ID do WhatsApp (`in_reply_to_external_id`). Aceitamos as duas.
+ *
+ * `Participant` é o JID de quem escreveu a mensagem citada — sem ele o
+ * WhatsApp não desenha o balão de citação.
+ */
+async function resolverCitacao(
+  tenant: Tenant,
+  message: Dict,
+  targetJid: string,
+): Promise<ContextInfoCitacao | null> {
+  const attrs = isDict(message['content_attributes'])
+    ? (message['content_attributes'] as Dict)
+    : {};
+
+  const externo = attrs['in_reply_to_external_id'];
+  if (typeof externo === 'string' && externo) {
+    const alvo = await findQuoteTargetByWaId(tenant.id, externo);
+    return { StanzaId: externo, Participant: alvo?.wa_sender_jid || targetJid };
+  }
+
+  const interno = Number(attrs['in_reply_to']);
+  if (Number.isFinite(interno) && interno > 0) {
+    const alvo = await findQuoteTargetByChatwootId(tenant.id, interno);
+    if (alvo) {
+      return {
+        StanzaId: alvo.wa_message_id,
+        // Sem autor registrado, a mensagem citada é do contato: em conversa
+        // individual o autor é o próprio destinatário.
+        Participant: alvo.wa_sender_jid || targetJid,
+      };
+    }
+  }
+
+  return null;
+}
+
 /** Chatwoot -> WhatsApp. Idempotente por chatwoot_message_id. */
 export async function handleOutboundEvent(tenant: Tenant, body: unknown): Promise<OutboundResult> {
   const message = extractChatwootMessage(body);
@@ -140,10 +188,17 @@ export async function handleOutboundEvent(tenant: Tenant, body: unknown): Promis
   const cw = new ChatwootClient(tenant);
   const sentIds: string[] = [];
 
+  const citacao = await resolverCitacao(tenant, message, targetJid);
+
   if (attachments.length === 0) {
     const waId = deterministicWaId(tenant.id, chatwootMessageId, 0);
-    await claimMessage(tenant.id, waId, 'out');
-    await wuz.sendText({ Phone: phone, Body: content, Id: waId });
+    await claimMessage(tenant.id, waId, 'out', null);
+    await wuz.sendText({
+      Phone: phone,
+      Body: content,
+      Id: waId,
+      ...(citacao ? { ContextInfo: citacao } : {}),
+    });
     sentIds.push(waId);
   } else {
     for (let i = 0; i < attachments.length; i += 1) {

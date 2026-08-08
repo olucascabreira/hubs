@@ -291,6 +291,42 @@ check('nome de arquivo do anexo recebido', () => {
   );
 });
 
+console.log('\nCitacao de mensagem (responder)');
+check('citacao do WhatsApp expoe o stanzaId da mensagem original', () => {
+  const ev = normalizeWuzapiEvent({
+    type: 'Message',
+    event: {
+      Info: {
+        Chat: '5511987654321@s.whatsapp.net',
+        Sender: '5511987654321@s.whatsapp.net',
+        ID: 'RESP1',
+        IsFromMe: false,
+      },
+      Message: {
+        extendedTextMessage: {
+          text: 'sim, pode ser',
+          contextInfo: {
+            stanzaId: '3EB0ORIGINAL',
+            participant: '5511987654321@s.whatsapp.net',
+          },
+        },
+      },
+    },
+  });
+  assert.equal(ev?.quotedWaMessageId, '3EB0ORIGINAL', 'precisa achar o alvo da citacao');
+  assert.equal(ev?.text, 'sim, pode ser');
+});
+check('mensagem sem citacao nao inventa alvo', () => {
+  const ev = normalizeWuzapiEvent({
+    type: 'Message',
+    event: {
+      Info: { Chat: '5511987654321@s.whatsapp.net', ID: 'SEMRESP', IsFromMe: false },
+      Message: { conversation: 'mensagem solta' },
+    },
+  });
+  assert.equal(ev?.quotedWaMessageId, null);
+});
+
 console.log('\nVinculo obsoleto (registro apagado no Chatwoot)');
 check('4xx de ID inexistente e tratado como vinculo obsoleto', async () => {
   const { HttpError } = await import('../clients/http');

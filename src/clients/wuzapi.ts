@@ -126,7 +126,14 @@ export class WuzapiClient {
 
   /* ------------------------------- envio ------------------------------- */
 
-  sendText(input: { Phone: string; Body: string; Id?: string; LinkPreview?: boolean }) {
+  sendText(input: {
+    Phone: string;
+    Body: string;
+    Id?: string;
+    LinkPreview?: boolean;
+    /** Cita outra mensagem: StanzaId do alvo e JID de quem a escreveu. */
+    ContextInfo?: { StanzaId: string; Participant: string };
+  }) {
     return this.call<{ Id?: string; Timestamp?: string }>('/chat/send/text', {
       method: 'POST',
       json: { LinkPreview: true, ...input },

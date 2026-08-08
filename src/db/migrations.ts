@@ -92,4 +92,13 @@ export const migrations: Migration[] = [
         ADD COLUMN IF NOT EXISTS group_allowlist text[] NOT NULL DEFAULT '{}';
     `,
   },
+  {
+    name: '003_message_sender',
+    sql: /* sql */ `
+      -- Autor da mensagem. O WhatsApp exige o JID de quem escreveu para
+      -- renderizar uma citacao (ContextInfo.Participant).
+      ALTER TABLE message_links
+        ADD COLUMN IF NOT EXISTS wa_sender_jid text;
+    `,
+  },
 ];

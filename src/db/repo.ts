@@ -247,15 +247,57 @@ export async function claimMessage(
   tenantId: string,
   waMessageId: string,
   direction: 'in' | 'out',
+  waSenderJid: string | null = null,
 ): Promise<boolean> {
   const rows = await query(
-    `INSERT INTO message_links (tenant_id, wa_message_id, direction)
-       VALUES ($1,$2,$3)
+    `INSERT INTO message_links (tenant_id, wa_message_id, direction, wa_sender_jid)
+       VALUES ($1,$2,$3,$4)
      ON CONFLICT (tenant_id, wa_message_id) DO NOTHING
      RETURNING id`,
-    [tenantId, waMessageId, direction],
+    [tenantId, waMessageId, direction, waSenderJid],
   );
   return rows.length > 0;
+}
+
+export interface CitacaoAlvo {
+  wa_message_id: string;
+  wa_sender_jid: string | null;
+}
+
+/** Localiza a mensagem do WhatsApp que o Chatwoot está citando. */
+export async function findQuoteTargetByChatwootId(
+  tenantId: string,
+  chatwootMessageId: number,
+): Promise<CitacaoAlvo | null> {
+  return queryOne<CitacaoAlvo>(
+    `SELECT wa_message_id, wa_sender_jid FROM message_links
+       WHERE tenant_id = $1 AND chatwoot_message_id = $2 LIMIT 1`,
+    [tenantId, chatwootMessageId],
+  );
+}
+
+export async function findQuoteTargetByWaId(
+  tenantId: string,
+  waMessageId: string,
+): Promise<CitacaoAlvo | null> {
+  return queryOne<CitacaoAlvo>(
+    `SELECT wa_message_id, wa_sender_jid FROM message_links
+       WHERE tenant_id = $1 AND wa_message_id = $2 LIMIT 1`,
+    [tenantId, waMessageId],
+  );
+}
+
+/** Mensagem do Chatwoot equivalente a uma do WhatsApp — para citar na entrada. */
+export async function findChatwootMessageIdByWaId(
+  tenantId: string,
+  waMessageId: string,
+): Promise<number | null> {
+  const row = await queryOne<{ chatwoot_message_id: number | null }>(
+    `SELECT chatwoot_message_id FROM message_links
+       WHERE tenant_id = $1 AND wa_message_id = $2 LIMIT 1`,
+    [tenantId, waMessageId],
+  );
+  return row?.chatwoot_message_id ?? null;
 }
 
 export async function attachChatwootMessageId(

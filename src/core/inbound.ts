@@ -7,6 +7,7 @@ import {
   claimMessage,
   dropContactLink,
   dropConversationLink,
+  findChatwootMessageIdByWaId,
   type Tenant,
 } from '../db/repo';
 import { HttpError } from '../clients/http';
@@ -71,7 +72,9 @@ export async function handleInboundEvent(tenant: Tenant, body: unknown): Promise
 
   // Trava de idempotencia: bloqueia reentrega do webhook e o eco das mensagens
   // que o proprio HUB enviou (o WuzAPI devolve o mesmo Id com IsFromMe=true).
-  const claimed = await claimMessage(tenant.id, event.waMessageId, direction);
+  // O JID do autor fica guardado: e o que permite citar esta mensagem depois
+  // (o WhatsApp exige ContextInfo.Participant para desenhar a citacao).
+  const claimed = await claimMessage(tenant.id, event.waMessageId, direction, event.senderJid);
   if (!claimed) return skip('mensagem ja processada');
 
   const cw = new ChatwootClient(tenant);
@@ -113,12 +116,20 @@ export async function handleInboundEvent(tenant: Tenant, body: unknown): Promise
     conversationId = await resolveConversation(tenant, cw, contactJid, contact);
   }
 
+  // Se a mensagem cita outra que ja replicamos, encadeia no Chatwoot para o
+  // agente ver a resposta no contexto certo.
+  const citadaNoChatwoot = event.quotedWaMessageId
+    ? await findChatwootMessageIdByWaId(tenant.id, event.quotedWaMessageId)
+    : null;
+
   const message = await cw.createMessage(conversationId, {
     content: content ?? '',
     message_type: event.isFromMe ? 'outgoing' : 'incoming',
     private: false,
     source_id: event.waMessageId,
     content_attributes: {
+      ...(citadaNoChatwoot ? { in_reply_to: citadaNoChatwoot } : {}),
+      ...(event.quotedWaMessageId ? { in_reply_to_external_id: event.quotedWaMessageId } : {}),
       wa_message_id: event.waMessageId,
       wa_chat_jid: event.chatJid,
       wa_sender_jid: event.senderJid,
@@ -127,7 +138,6 @@ export async function handleInboundEvent(tenant: Tenant, body: unknown): Promise
       ...(event.isGroup
         ? { wa_group: true, wa_sender_name: event.pushName, wa_sender_phone: jidToE164(event.senderJid) }
         : {}),
-      ...(event.quotedWaMessageId ? { wa_quoted_message_id: event.quotedWaMessageId } : {}),
     },
     attachments,
   });
