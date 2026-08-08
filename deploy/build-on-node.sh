@@ -29,7 +29,11 @@ echo "==> No        : $(hostname)"
 
 echo
 echo "==> Construindo ${IMAGE_LOCAL}:${SHA} (e :latest)"
-docker build -t "${IMAGE_LOCAL}:${SHA}" -t "${IMAGE_LOCAL}:latest" .
+docker build \
+  --build-arg "BUILD_SHA=${SHA}" \
+  -t "${IMAGE_LOCAL}:${SHA}" \
+  -t "${IMAGE_LOCAL}:latest" \
+  .
 
 if [ -n "${IMAGE_REMOTE}" ]; then
   echo
@@ -57,6 +61,9 @@ if docker service inspect "${SERVICE}" >/dev/null 2>&1; then
   echo
   echo "Estado das tasks:"
   docker service ps "${SERVICE}" --no-trunc | head -5
+  echo
+  echo "Confirme que a imagem nova esta no ar — o campo build deve ser ${SHA}:"
+  echo "  curl -s https://hub.impulsemidia.com.br/health"
 else
   echo "Servico ${SERVICE} nao encontrado neste no."
   echo "Depois de subir a stack, aplique a imagem com:"

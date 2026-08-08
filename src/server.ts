@@ -73,6 +73,9 @@ export async function buildServer(): Promise<FastifyInstance> {
     const ok = db.status === 'fulfilled' && redis.status === 'fulfilled';
     return {
       status: ok ? 'ok' : 'degraded',
+      // Identifica a imagem em execucao: e a unica forma de confirmar, de
+      // fora, que um rebuild chegou de fato ao servico.
+      build: process.env.BUILD_SHA ?? 'desconhecido',
       database: db.status === 'fulfilled' ? 'ok' : 'erro',
       redis: redis.status === 'fulfilled' ? 'ok' : 'erro',
       queues: {

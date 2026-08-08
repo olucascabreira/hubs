@@ -9,6 +9,12 @@ RUN npm run build
 FROM node:20-alpine AS runtime
 WORKDIR /app
 ENV NODE_ENV=production
+
+# Identifica a imagem em execucao. Sem isto nao ha como saber, de fora, se um
+# rebuild realmente chegou ao servico — o Swarm fixa a imagem pelo ID e uma
+# tag `latest` reconstruida passa despercebida.
+ARG BUILD_SHA=desconhecido
+ENV BUILD_SHA=${BUILD_SHA}
 COPY package.json package-lock.json* ./
 RUN npm install --omit=dev --no-audit --no-fund && npm cache clean --force
 COPY --from=build /app/dist ./dist
