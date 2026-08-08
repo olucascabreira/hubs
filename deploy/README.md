@@ -101,8 +101,15 @@ endereço e **deixe `BUILD_NODE_HOSTNAME` vazio** — qualquer nó serve.
 
 ### 3. Subir a stack
 
-Portainer → Stacks → Add stack → Web editor → cole `portainer-stack-swarm.yml`
-e preencha as variáveis (lista no fim do arquivo).
+Portainer → Stacks → Add stack → Web editor → cole `portainer-stack-swarm.yml`.
+
+Em **Environment variables**, use *Advanced mode* e cole o conteúdo de
+[`stack.env`](stack.env). O parser do Portainer lê cada linha como `CHAVE=valor`
+— **não aceita comentários (`#`) nem linhas em branco**, por isso esse arquivo
+é só pares. A explicação de cada variável está na tabela acima.
+
+Antes de subir, troque `BUILD_NODE_HOSTNAME` pelo hostname do passo 2.
+Deixá-lo vazio gera o constraint `node.hostname == ` e o Swarm rejeita a stack.
 
 ### 4. Conferir
 

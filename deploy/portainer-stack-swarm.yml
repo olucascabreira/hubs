@@ -54,12 +54,18 @@ services:
       - network_public   # Traefik + WuzAPI + Chatwoot
       - hub_internal     # Postgres e Redis do HUB
 
+    # `node` em vez de `wget`: esta garantido na imagem, e o timeout interno
+    # faz o comando terminar mesmo se o endpoint travar.
     healthcheck:
-      test: ["CMD", "wget", "-qO-", "http://localhost:3000/health"]
+      test:
+        - CMD
+        - node
+        - -e
+        - "require('http').get({host:'127.0.0.1',port:3000,path:'/health',timeout:4000},r=>process.exit(r.statusCode===200?0:1)).on('error',()=>process.exit(1))"
       interval: 30s
-      timeout: 5s
+      timeout: 10s
       retries: 5
-      start_period: 40s
+      start_period: 60s
 
     deploy:
       mode: replicated
@@ -73,13 +79,18 @@ services:
         limits:
           memory: 512M
 
-      # Swarm multi-no SEM registry: fixe o servico no no onde a imagem foi
-      # construida, senao o Swarm pode agendar num no que nao a tem e o
-      # servico fica preso em "no suitable node".
-      # Descubra o nome com: docker node ls
+      # Swarm multi-no SEM registry: fixa o servico no no onde a imagem foi
+      # construida. Sem isso o Swarm pode agendar num no que nao tem a imagem
+      # e o servico fica preso em "no suitable node".
+      #
+      # ATENCAO nos dois sentidos:
+      #   * BUILD_NODE_HOSTNAME vazio  -> constraint invalido, a stack nem sobe
+      #   * usando REGISTRY            -> APAGUE estas 3 linhas, a imagem esta
+      #                                   disponivel em qualquer no
+      # Descubra o hostname com: docker node ls
       placement:
         constraints:
-          - node.hostname == ${BUILD_NODE_HOSTNAME:-}
+          - node.hostname == ${BUILD_NODE_HOSTNAME}
 
       labels:
         - "traefik.enable=true"

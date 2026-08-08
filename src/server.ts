@@ -47,12 +47,27 @@ export async function buildServer(): Promise<FastifyInstance> {
     },
   );
 
+  /**
+   * Precisa responder SEMPRE, e rapido. `Promise.allSettled` sozinho nao
+   * basta: o ioredis enfileira comandos enquanto reconecta, entao um `ping()`
+   * com o Redis fora nunca se estabelece e o endpoint travaria — o healthcheck
+   * do Docker estouraria o timeout e o orquestrador mataria um processo que
+   * na verdade esta saudavel.
+   */
+  const withTimeout = <T>(promise: PromiseLike<T>, ms: number, label: string): Promise<T> =>
+    Promise.race([
+      Promise.resolve(promise),
+      new Promise<never>((_, reject) =>
+        setTimeout(() => reject(new Error(`${label}: timeout apos ${ms}ms`)), ms).unref(),
+      ),
+    ]);
+
   app.get('/health', async () => {
     const [db, redis, inboundCounts, outboundCounts] = await Promise.allSettled([
-      pool.query('SELECT 1'),
-      connection.ping(),
-      inboundQueue.getJobCounts('waiting', 'active', 'failed'),
-      outboundQueue.getJobCounts('waiting', 'active', 'failed'),
+      withTimeout(pool.query('SELECT 1'), 2000, 'postgres'),
+      withTimeout(connection.ping(), 2000, 'redis'),
+      withTimeout(inboundQueue.getJobCounts('waiting', 'active', 'failed'), 2000, 'fila inbound'),
+      withTimeout(outboundQueue.getJobCounts('waiting', 'active', 'failed'), 2000, 'fila outbound'),
     ]);
 
     const ok = db.status === 'fulfilled' && redis.status === 'fulfilled';
