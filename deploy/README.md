@@ -1,39 +1,39 @@
-# Deploy
+﻿# Deploy
 
 ## Qual stack usar
 
-| Sua situação | Arquivo |
+| Sua situaÃ§Ã£o | Arquivo |
 |---|---|
-| Já tenho Postgres e Redis na infra | [`stack-externo.yml`](stack-externo.yml) |
-| Não tenho, quero tudo junto | [`stack-template.yml`](stack-template.yml) |
-| Desenvolvimento na minha máquina | [`../docker-compose.yml`](../docker-compose.yml) |
+| JÃ¡ tenho Postgres e Redis na infra | [`stack-externo.yml`](stack-externo.yml) |
+| NÃ£o tenho, quero tudo junto | [`stack-template.yml`](stack-template.yml) |
+| Desenvolvimento na minha mÃ¡quina | [`../docker-compose.yml`](../docker-compose.yml) |
 
-As duas primeiras são para **Docker Swarm + Portainer + Traefik** e usam a imagem publicada num
-registry. Para Docker standalone, mova o bloco `deploy.labels` para `labels` em cada serviço e
+As duas primeiras sÃ£o para **Docker Swarm + Portainer + Traefik** e usam a imagem publicada num
+registry. Para Docker standalone, mova o bloco `deploy.labels` para `labels` em cada serviÃ§o e
 remova o restante de `deploy`.
 
 ---
 
-## Pré-requisitos
+## PrÃ©-requisitos
 
 - Traefik com um resolver TLS configurado
-- DNS do domínio do HUB apontando para o Traefik
-- A rede externa do Traefik já existente (`docker network ls`)
-- Imagem publicada — veja [Publicar a imagem](#publicar-a-imagem)
+- DNS do domÃ­nio do HUB apontando para o Traefik
+- A rede externa do Traefik jÃ¡ existente (`docker network ls`)
+- Imagem publicada â€” veja [Publicar a imagem](#publicar-a-imagem)
 
 ---
 
-## Instalação
+## InstalaÃ§Ã£o
 
-Portainer → Stacks → Add stack → Web editor → cole a stack escolhida.
+Portainer â†’ Stacks â†’ Add stack â†’ Web editor â†’ cole a stack escolhida.
 
-Em *Environment variables*, preencha. O editor lê cada linha como `CHAVE=valor` e **não aceita
-comentários nem linhas em branco**.
+Em *Environment variables*, preencha. O editor lÃª cada linha como `CHAVE=valor` e **nÃ£o aceita
+comentÃ¡rios nem linhas em branco**.
 
-### Com Postgres e Redis próprios (`stack-externo.yml`)
+### Com Postgres e Redis prÃ³prios (`stack-externo.yml`)
 
 ```
-HUB_IMAGE=ghcr.io/OWNER/REPO:1.0.0
+HUB_IMAGE=ghcr.io/olucascabreira/hub:1.0.0
 HUB_DOMAIN=hub.seudominio.com.br
 ADMIN_TOKEN=<openssl rand -hex 32>
 DATABASE_URL=postgres://hub:senha@postgres:5432/hub
@@ -42,29 +42,29 @@ TRAEFIK_NETWORK=<docker network ls>
 CERT_RESOLVER=<resolver do seu Traefik>
 ```
 
-Antes, crie o banco — **não reuse o do Chatwoot**:
+Antes, crie o banco â€” **nÃ£o reuse o do Chatwoot**:
 
 ```sql
 CREATE DATABASE hub;
 CREATE USER hub WITH ENCRYPTED PASSWORD 'trocar';
 GRANT ALL PRIVILEGES ON DATABASE hub TO hub;
 \c hub
-GRANT ALL ON SCHEMA public TO hub;   -- necessário no Postgres 15+
+GRANT ALL ON SCHEMA public TO hub;   -- necessÃ¡rio no Postgres 15+
 ```
 
-Esse último `GRANT` costuma ser esquecido: no Postgres 15+ o schema `public` deixou de ser gravável
-por padrão, e sem ele as migrations falham no boot. As tabelas o HUB cria sozinho.
+Esse Ãºltimo `GRANT` costuma ser esquecido: no Postgres 15+ o schema `public` deixou de ser gravÃ¡vel
+por padrÃ£o, e sem ele as migrations falham no boot. As tabelas o HUB cria sozinho.
 
-No Redis, isole em duas camadas: um número de banco próprio na URL (`/3`) e o `REDIS_PREFIX`
-(default `hub`), que separa as chaves do BullMQ das de outras aplicações.
+No Redis, isole em duas camadas: um nÃºmero de banco prÃ³prio na URL (`/3`) e o `REDIS_PREFIX`
+(default `hub`), que separa as chaves do BullMQ das de outras aplicaÃ§Ãµes.
 
-Use o **nome do serviço** nas URLs (`postgres:5432`), não `localhost`. Se Postgres e Redis estiverem
+Use o **nome do serviÃ§o** nas URLs (`postgres:5432`), nÃ£o `localhost`. Se Postgres e Redis estiverem
 noutra rede Docker, acrescente-a em `networks` na stack.
 
 ### Com tudo junto (`stack-template.yml`)
 
 ```
-HUB_IMAGE=ghcr.io/OWNER/REPO:1.0.0
+HUB_IMAGE=ghcr.io/olucascabreira/hub:1.0.0
 HUB_DOMAIN=hub.seudominio.com.br
 ADMIN_TOKEN=<openssl rand -hex 32>
 POSTGRES_PASSWORD=<openssl rand -hex 16>
@@ -84,40 +84,40 @@ curl -s https://hub.seudominio.com.br/health
 { "status": "ok", "build": "edf5322", "database": "ok", "redis": "ok", "queues": { ... } }
 ```
 
-O campo `build` informa o commit em execução — é assim que se confirma que um deploy chegou ao
-serviço. Depois, abra `/ui` para cadastrar a primeira instância.
+O campo `build` informa o commit em execuÃ§Ã£o â€” Ã© assim que se confirma que um deploy chegou ao
+serviÃ§o. Depois, abra `/ui` para cadastrar a primeira instÃ¢ncia.
 
 ---
 
 ## Publicar a imagem
 
-Uma vez, por quem mantém o projeto:
+Uma vez, por quem mantÃ©m o projeto:
 
 ```bash
 git tag v1.0.0 && git push origin v1.0.0
 ```
 
-O workflow [`publish.yml`](../.github/workflows/publish.yml) roda typecheck e testes, constrói para
-`amd64` e `arm64` e publica em `ghcr.io/OWNER/REPO` com as tags `1.0.0`, `1.0` e `latest`.
-Imagem privada? Cadastre as credenciais em Portainer → Registries.
+O workflow [`publish.yml`](../.github/workflows/publish.yml) roda typecheck e testes, constrÃ³i para
+`amd64` e `arm64` e publica em `ghcr.io/olucascabreira/hub` com as tags `1.0.0`, `1.0` e `latest`.
+Imagem privada? Cadastre as credenciais em Portainer â†’ Registries.
 
-Prefira a tag de versão a `:latest`: o Swarm fixa a imagem pelo ID resolvido no deploy, e uma tag
-móvel torna difícil saber o que está rodando.
+Prefira a tag de versÃ£o a `:latest`: o Swarm fixa a imagem pelo ID resolvido no deploy, e uma tag
+mÃ³vel torna difÃ­cil saber o que estÃ¡ rodando.
 
 ### Sem registry
 
-Dá para construir num nó e usar a imagem local, com duas ressalvas: o serviço fica preso a esse nó
-(sem failover) e cada atualização exige repetir o processo.
+DÃ¡ para construir num nÃ³ e usar a imagem local, com duas ressalvas: o serviÃ§o fica preso a esse nÃ³
+(sem failover) e cada atualizaÃ§Ã£o exige repetir o processo.
 
 ```bash
-# leve o código até um nó do Swarm
+# leve o cÃ³digo atÃ© um nÃ³ do Swarm
 scp hub.bundle usuario@servidor:/opt/
 cd /opt && git clone hub.bundle hub && cd hub
 bash deploy/build-on-node.sh
 ```
 
-O script constrói, marca com `latest` e com o SHA do commit, e aplica no serviço. Na stack, use
-`HUB_IMAGE=wuzapi-chatwoot-hub:latest` e acrescente ao `deploy` do serviço `hub`:
+O script constrÃ³i, marca com `latest` e com o SHA do commit, e aplica no serviÃ§o. Na stack, use
+`HUB_IMAGE=wuzapi-chatwoot-hub:latest` e acrescente ao `deploy` do serviÃ§o `hub`:
 
 ```yaml
       placement:
@@ -125,7 +125,7 @@ O script constrói, marca com `latest` e com o SHA do commit, e aplica no servi�
           - node.hostname == NOME_DO_NO      # docker node ls
 ```
 
-Sem esse constraint o Swarm pode agendar num nó que não tem a imagem, e o serviço trava em
+Sem esse constraint o Swarm pode agendar num nÃ³ que nÃ£o tem a imagem, e o serviÃ§o trava em
 *"no suitable node"*.
 
 ---
@@ -134,14 +134,14 @@ Sem esse constraint o Swarm pode agendar num nó que não tem a imagem, e o serv
 
 Com registry: troque `HUB_IMAGE` para a nova tag e atualize a stack.
 
-Sem registry, na mesma máquina do build:
+Sem registry, na mesma mÃ¡quina do build:
 
 ```bash
 cd /opt/hub && git pull && bash deploy/build-on-node.sh
 ```
 
-O Swarm fixa a imagem pelo ID no momento do deploy — reconstruir a tag `latest` **não** troca o que
-o serviço executa. Por isso o script usa `docker service update --image ... --no-resolve-image
+O Swarm fixa a imagem pelo ID no momento do deploy â€” reconstruir a tag `latest` **nÃ£o** troca o que
+o serviÃ§o executa. Por isso o script usa `docker service update --image ... --no-resolve-image
 --force`. Confirme sempre pelo campo `build` do `/health`.
 
 ---
@@ -150,10 +150,10 @@ o serviço executa. Por isso o script usa `docker service update --image ... --n
 
 O provisionamento faz duas escritas fora do HUB:
 
-1. **Inbox no Chatwoot** — apague em Configurações → Caixas de Entrada
-2. **Webhook no WuzAPI** — sobrescrito no provisionamento
+1. **Inbox no Chatwoot** â€” apague em ConfiguraÃ§Ãµes â†’ Caixas de Entrada
+2. **Webhook no WuzAPI** â€” sobrescrito no provisionamento
 
-Excluir a instância pelo painel já remove o webhook do WuzAPI. O inbox é preservado de propósito,
-porque guarda o histórico das conversas.
+Excluir a instÃ¢ncia pelo painel jÃ¡ remove o webhook do WuzAPI. O inbox Ã© preservado de propÃ³sito,
+porque guarda o histÃ³rico das conversas.
 
-Derrubar a stack não desfaz nenhuma das duas.
+Derrubar a stack nÃ£o desfaz nenhuma das duas.

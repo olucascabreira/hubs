@@ -1,5 +1,5 @@
-# ---------------------------------------------------------------------------
-# HUB WuzAPI <-> Chatwoot — stack de instalacao
+﻿# ---------------------------------------------------------------------------
+# HUB WuzAPI <-> Chatwoot â€” stack de instalacao
 #
 # Cole no Portainer (Stacks -> Add stack -> Web editor), preencha as variaveis
 # em "Environment variables" e faca o deploy. Nao precisa construir imagem nem
@@ -16,7 +16,7 @@
 #   CERT_RESOLVER       nome do resolver do Traefik
 #
 # VARIAVEIS OPCIONAIS
-#   HUB_IMAGE           default: ghcr.io/OWNER/REPO:latest
+#   HUB_IMAGE           default: ghcr.io/olucascabreira/hub:latest
 #   DEFAULT_WUZAPI_BASE_URL     pre-preenche o cadastro de instancias
 #   DEFAULT_CHATWOOT_BASE_URL   idem
 #   ADMIN_ALLOWED_IPS   restringe /admin por IP, ex.: 203.0.113.4/32
@@ -24,7 +24,7 @@
 
 services:
   hub:
-    image: ${HUB_IMAGE:-ghcr.io/OWNER/REPO:latest}
+    image: ${HUB_IMAGE:-ghcr.io/olucascabreira/hub:latest}
 
     environment:
       PORT: 3000
