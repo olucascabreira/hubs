@@ -18,6 +18,9 @@ const schema = z.object({
   DATABASE_SSL: bool,
 
   REDIS_URL: z.string().min(1),
+  // Prefixo das chaves no Redis. Isola o HUB quando a instancia e
+  // compartilhada com outras aplicacoes que tambem usam BullMQ.
+  REDIS_PREFIX: z.string().min(1).default('hub'),
 
   INBOUND_CONCURRENCY: z.coerce.number().int().positive().default(8),
   OUTBOUND_CONCURRENCY: z.coerce.number().int().positive().default(8),

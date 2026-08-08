@@ -1,0 +1,110 @@
+# ---------------------------------------------------------------------------
+# HUB WuzAPI <-> Chatwoot — usando Postgres e Redis QUE VOCE JA TEM
+#
+# Um servico so. Postgres e Redis ficam de fora: informe as URLs deles.
+#
+# ANTES DE SUBIR
+#
+# 1. Crie um banco dedicado no seu Postgres (nao reuse o do Chatwoot):
+#      CREATE DATABASE hub;
+#      CREATE USER hub WITH ENCRYPTED PASSWORD 'trocar';
+#      GRANT ALL PRIVILEGES ON DATABASE hub TO hub;
+#      \c hub
+#      GRANT ALL ON SCHEMA public TO hub;   -- necessario no Postgres 15+
+#    As tabelas o HUB cria sozinho no boot.
+#
+# 2. No Redis, isole o HUB de duas formas (as duas somam):
+#      - numero de banco proprio na URL:  redis://host:6379/3
+#      - REDIS_PREFIX, que separa as chaves do BullMQ
+#
+# 3. Confirme que o HUB alcanca os dois. Se estiverem noutra rede docker,
+#    acrescente essa rede em `networks` abaixo.
+#
+# VARIAVEIS OBRIGATORIAS
+#   HUB_IMAGE  HUB_DOMAIN  ADMIN_TOKEN  DATABASE_URL  REDIS_URL
+#   TRAEFIK_NETWORK  CERT_RESOLVER
+# ---------------------------------------------------------------------------
+
+services:
+  hub:
+    image: ${HUB_IMAGE}
+
+    environment:
+      PORT: 3000
+      HOST: 0.0.0.0
+      LOG_LEVEL: ${LOG_LEVEL:-info}
+
+      PUBLIC_URL: https://${HUB_DOMAIN}
+      ADMIN_TOKEN: ${ADMIN_TOKEN}
+
+      # Ex.: postgres://hub:senha@postgres:5432/hub
+      # Use o NOME DO SERVICO na rede docker, nao localhost.
+      DATABASE_URL: ${DATABASE_URL}
+      DATABASE_SSL: ${DATABASE_SSL:-false}
+
+      # Ex.: redis://redis:6379/3   (o /3 escolhe um banco so do HUB)
+      REDIS_URL: ${REDIS_URL}
+      # Separa as chaves do BullMQ das de outras aplicacoes no mesmo Redis.
+      REDIS_PREFIX: ${REDIS_PREFIX:-hub}
+
+      INBOUND_CONCURRENCY: ${INBOUND_CONCURRENCY:-8}
+      OUTBOUND_CONCURRENCY: ${OUTBOUND_CONCURRENCY:-8}
+      JOB_ATTEMPTS: ${JOB_ATTEMPTS:-5}
+      JOB_BACKOFF_MS: ${JOB_BACKOFF_MS:-3000}
+      MAX_MEDIA_BYTES: ${MAX_MEDIA_BYTES:-41943040}
+
+      CAPTURE_RAW_WEBHOOKS: ${CAPTURE_RAW_WEBHOOKS:-false}
+      CAPTURE_DIR: /data/captures
+      CAPTURE_MAX_FILES: 200
+
+      DEFAULT_WUZAPI_BASE_URL: ${DEFAULT_WUZAPI_BASE_URL:-}
+      DEFAULT_CHATWOOT_BASE_URL: ${DEFAULT_CHATWOOT_BASE_URL:-}
+      DEFAULT_WUZAPI_EVENTS: ${DEFAULT_WUZAPI_EVENTS:-Message,ReadReceipt}
+      CONTACT_IDENTIFIER_PREFIX: "wa:"
+
+    volumes:
+      - hub_captures:/data/captures
+
+    networks:
+      # Traefik. Se o seu Postgres/Redis estiverem noutra rede, adicione-a aqui
+      # e declare em `networks:` no fim do arquivo.
+      - proxy
+
+    healthcheck:
+      test:
+        - CMD
+        - node
+        - -e
+        - "require('http').get({host:'127.0.0.1',port:3000,path:'/health',timeout:4000},r=>process.exit(r.statusCode===200?0:1)).on('error',()=>process.exit(1))"
+      interval: 30s
+      timeout: 10s
+      retries: 5
+      start_period: 60s
+
+    deploy:
+      mode: replicated
+      replicas: 1
+      restart_policy:
+        condition: on-failure
+        delay: 10s
+      update_config:
+        order: start-first
+      resources:
+        limits:
+          memory: 512M
+      labels:
+        - traefik.enable=true
+        - traefik.http.routers.hub.rule=Host(`${HUB_DOMAIN}`)
+        - traefik.http.routers.hub.entrypoints=websecure
+        - traefik.http.routers.hub.tls.certresolver=${CERT_RESOLVER}
+        - traefik.http.routers.hub.service=hub
+        - traefik.http.services.hub.loadbalancer.server.port=3000
+        - traefik.http.services.hub.loadbalancer.passHostHeader=true
+
+networks:
+  proxy:
+    external: true
+    name: ${TRAEFIK_NETWORK}
+
+volumes:
+  hub_captures:

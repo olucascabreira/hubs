@@ -27,8 +27,21 @@ const defaultJobOptions: JobsOptions = {
   removeOnFail: { age: 7 * 24 * 3600 },
 };
 
-export const inboundQueue = new Queue<JobData>(INBOUND_QUEUE, { connection, defaultJobOptions });
-export const outboundQueue = new Queue<JobData>(OUTBOUND_QUEUE, { connection, defaultJobOptions });
+// `prefix` isola as chaves quando o Redis e compartilhado com outras
+// aplicacoes. Sem ele, duas apps com BullMQ e filas de mesmo nome disputariam
+// os mesmos jobs.
+const prefix = config.REDIS_PREFIX;
+
+export const inboundQueue = new Queue<JobData>(INBOUND_QUEUE, {
+  connection,
+  prefix,
+  defaultJobOptions,
+});
+export const outboundQueue = new Queue<JobData>(OUTBOUND_QUEUE, {
+  connection,
+  prefix,
+  defaultJobOptions,
+});
 
 /**
  * `jobId` deduplica reentregas do mesmo evento: o BullMQ descarta um job cujo
@@ -74,7 +87,7 @@ export function startWorkers(): Worker[] {
         return classificarErro(err);
       }
     },
-    { connection, concurrency: config.INBOUND_CONCURRENCY },
+    { connection, prefix, concurrency: config.INBOUND_CONCURRENCY },
   );
 
   const outbound = new Worker<JobData>(
@@ -87,7 +100,7 @@ export function startWorkers(): Worker[] {
         return classificarErro(err);
       }
     },
-    { connection, concurrency: config.OUTBOUND_CONCURRENCY },
+    { connection, prefix, concurrency: config.OUTBOUND_CONCURRENCY },
   );
 
   for (const worker of [inbound, outbound]) {
