@@ -1,5 +1,49 @@
 # Deploy em Portainer + Traefik
 
+## Instalação replicável (recomendada)
+
+Com a imagem publicada num registry, instalar é colar uma stack — sem copiar código,
+sem construir em nó nenhum, sem `placement`. É o mesmo modelo do Chatwoot.
+
+**Uma vez, por quem mantém o projeto:**
+
+```bash
+git tag v1.0.0 && git push origin v1.0.0
+```
+
+O workflow [`publish.yml`](../.github/workflows/publish.yml) roda typecheck e testes, constrói para
+`amd64` e `arm64`, e publica em `ghcr.io/OWNER/REPO` com as tags `1.0.0`, `1.0` e `latest`.
+Se a imagem for privada, cadastre as credenciais em Portainer → Registries.
+
+**Em cada instalação:**
+
+1. Portainer → Stacks → Add stack → Web editor → cole [`stack-template.yml`](stack-template.yml)
+2. Preencha as variáveis:
+
+```
+HUB_IMAGE=ghcr.io/OWNER/REPO:1.0.0
+HUB_DOMAIN=hub.seudominio.com.br
+ADMIN_TOKEN=<openssl rand -hex 32>
+POSTGRES_PASSWORD=<openssl rand -hex 16>
+TRAEFIK_NETWORK=<docker network ls>
+CERT_RESOLVER=<resolver do seu Traefik>
+```
+
+3. Deploy. As migrations rodam sozinhas no boot.
+4. Abra `https://HUB_DOMAIN/ui`, informe o `ADMIN_TOKEN` e cadastre a primeira instância.
+
+Requisitos do ambiente: Traefik com um resolver TLS, DNS do `HUB_DOMAIN` apontando para ele, e a
+rede externa do Traefik existente. Postgres e Redis vêm na própria stack — nada a provisionar.
+
+Prefira a tag de versão (`:1.0.0`) a `:latest`: o Swarm fixa a imagem pelo ID, e uma tag móvel
+torna difícil saber o que está rodando. `GET /health` sempre informa o commit em execução.
+
+---
+
+## Instalação a partir do código-fonte
+
+Use quando não houver registry disponível. Exige construir a imagem num nó e prender o serviço a ele.
+
 O HUB entra como mais um serviço ao lado do WuzAPI e do Chatwoot. Sem túnel: o Traefik já resolve
 o hostname público, e a conversa com o WuzAPI acontece pela rede interna do Docker.
 

@@ -1,0 +1,157 @@
+# ---------------------------------------------------------------------------
+# HUB WuzAPI <-> Chatwoot — stack de instalacao
+#
+# Cole no Portainer (Stacks -> Add stack -> Web editor), preencha as variaveis
+# em "Environment variables" e faca o deploy. Nao precisa construir imagem nem
+# copiar codigo: a imagem vem publicada do registry.
+#
+# Funciona em Docker Swarm. Para Docker standalone, mova o bloco `deploy.labels`
+# para `labels` em cada servico e remova o resto de `deploy`.
+#
+# VARIAVEIS OBRIGATORIAS
+#   HUB_DOMAIN          hub.seudominio.com.br      (DNS apontando para o Traefik)
+#   ADMIN_TOKEN         openssl rand -hex 32
+#   POSTGRES_PASSWORD   openssl rand -hex 16
+#   TRAEFIK_NETWORK     nome da rede do Traefik    (docker network ls)
+#   CERT_RESOLVER       nome do resolver do Traefik
+#
+# VARIAVEIS OPCIONAIS
+#   HUB_IMAGE           default: ghcr.io/OWNER/REPO:latest
+#   DEFAULT_WUZAPI_BASE_URL     pre-preenche o cadastro de instancias
+#   DEFAULT_CHATWOOT_BASE_URL   idem
+#   ADMIN_ALLOWED_IPS   restringe /admin por IP, ex.: 203.0.113.4/32
+# ---------------------------------------------------------------------------
+
+services:
+  hub:
+    image: ${HUB_IMAGE:-ghcr.io/OWNER/REPO:latest}
+
+    environment:
+      PORT: 3000
+      HOST: 0.0.0.0
+      LOG_LEVEL: ${LOG_LEVEL:-info}
+
+      # URL que WuzAPI e Chatwoot usam para chamar o HUB. E ela que fica
+      # gravada nos dois webhooks durante o provisionamento.
+      PUBLIC_URL: https://${HUB_DOMAIN}
+      ADMIN_TOKEN: ${ADMIN_TOKEN}
+
+      DATABASE_URL: postgres://hub:${POSTGRES_PASSWORD}@hub-postgres:5432/hub
+      DATABASE_SSL: "false"
+      REDIS_URL: redis://hub-redis:6379
+
+      INBOUND_CONCURRENCY: ${INBOUND_CONCURRENCY:-8}
+      OUTBOUND_CONCURRENCY: ${OUTBOUND_CONCURRENCY:-8}
+      JOB_ATTEMPTS: ${JOB_ATTEMPTS:-5}
+      JOB_BACKOFF_MS: ${JOB_BACKOFF_MS:-3000}
+      MAX_MEDIA_BYTES: ${MAX_MEDIA_BYTES:-41943040}
+
+      # Diagnostico. Grava o corpo cru dos webhooks, que contem conteudo de
+      # conversas: ligue so para investigar um problema, e desligue depois.
+      CAPTURE_RAW_WEBHOOKS: ${CAPTURE_RAW_WEBHOOKS:-false}
+      CAPTURE_DIR: /data/captures
+      CAPTURE_MAX_FILES: 200
+
+      DEFAULT_WUZAPI_BASE_URL: ${DEFAULT_WUZAPI_BASE_URL:-}
+      DEFAULT_CHATWOOT_BASE_URL: ${DEFAULT_CHATWOOT_BASE_URL:-}
+      DEFAULT_WUZAPI_EVENTS: ${DEFAULT_WUZAPI_EVENTS:-Message,ReadReceipt}
+      CONTACT_IDENTIFIER_PREFIX: "wa:"
+
+    volumes:
+      - hub_captures:/data/captures
+
+    networks:
+      - proxy
+      - hub_internal
+
+    healthcheck:
+      test:
+        - CMD
+        - node
+        - -e
+        - "require('http').get({host:'127.0.0.1',port:3000,path:'/health',timeout:4000},r=>process.exit(r.statusCode===200?0:1)).on('error',()=>process.exit(1))"
+      interval: 30s
+      timeout: 10s
+      retries: 5
+      start_period: 60s
+
+    deploy:
+      mode: replicated
+      replicas: 1
+      restart_policy:
+        condition: on-failure
+        delay: 10s
+      update_config:
+        order: start-first
+      resources:
+        limits:
+          memory: 512M
+      labels:
+        - traefik.enable=true
+        - traefik.http.routers.hub.rule=Host(`${HUB_DOMAIN}`)
+        - traefik.http.routers.hub.entrypoints=websecure
+        - traefik.http.routers.hub.tls.certresolver=${CERT_RESOLVER}
+        - traefik.http.routers.hub.service=hub
+        - traefik.http.services.hub.loadbalancer.server.port=3000
+        - traefik.http.services.hub.loadbalancer.passHostHeader=true
+
+  hub-postgres:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_USER: hub
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+      POSTGRES_DB: hub
+    volumes:
+      - hub_pgdata:/var/lib/postgresql/data
+    networks:
+      - hub_internal
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U hub -d hub"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+    deploy:
+      mode: replicated
+      replicas: 1
+      restart_policy:
+        condition: on-failure
+      resources:
+        limits:
+          memory: 512M
+
+  hub-redis:
+    image: redis:7-alpine
+    command: ["redis-server", "--appendonly", "yes"]
+    volumes:
+      - hub_redisdata:/data
+    networks:
+      - hub_internal
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+    deploy:
+      mode: replicated
+      replicas: 1
+      restart_policy:
+        condition: on-failure
+      resources:
+        limits:
+          memory: 256M
+
+networks:
+  # Rede onde o Traefik ja roda. `external: true` = nao criar.
+  proxy:
+    external: true
+    name: ${TRAEFIK_NETWORK}
+
+  # Privada da stack: so HUB, Postgres e Redis.
+  hub_internal:
+    driver: overlay
+    attachable: true
+
+volumes:
+  hub_pgdata:
+  hub_redisdata:
+  hub_captures:
