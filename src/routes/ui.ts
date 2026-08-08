@@ -102,6 +102,7 @@ label.fld small{font-size:11px}
         <button id="recarregar">Recarregar</button>
         <button id="provisionar">Reprovisionar</button>
         <button id="conectar">Conectar sessao</button>
+        <button id="excluir" style="color:var(--er);border-color:var(--er)">Excluir</button>
         <span class="sp" style="flex:1"></span>
         <button class="pri" id="abrirNova">+ Nova instancia</button>
       </div>
@@ -471,6 +472,24 @@ label.fld small{font-size:11px}
   $('salvarGrupos').addEventListener('click', salvarGrupos);
   $('limparGrupos').addEventListener('click', function(){ selecionados = {}; pintarGrupos(); });
   $('carregarCap').addEventListener('click', carregarCap);
+  $('excluir').addEventListener('click', function(){
+    if (!slug) return;
+    var digitado = prompt(
+      'Excluir a instancia "' + slug + '" do HUB.\n\n' +
+      'Sera feito: remove o webhook do WuzAPI e apaga os vinculos de contato/conversa.\n' +
+      'NAO sera feito: o inbox do Chatwoot e o historico permanecem.\n\n' +
+      'Para confirmar, digite o identificador:');
+    if (digitado !== slug) { if (digitado !== null) toast('Identificador nao confere.', true); return; }
+
+    api('/admin/tenants/' + slug, { method:'DELETE' }).then(function(r){
+      toast('Instancia removida. ' + (r.limpeza && r.limpeza.wuzapi_webhook === 'removido'
+        ? 'Webhook do WuzAPI limpo.' : 'Atencao: o webhook do WuzAPI nao pode ser limpo.'));
+      if (r.pendente) alert(r.pendente);
+      slug = null;
+      listarTenants().then(function(){ slug = $('tenants').value || null; detalhes(); });
+    }).catch(function(e){ toast('Falhou: ' + e.message, true); });
+  });
+
   $('abrirNova').addEventListener('click', abrirNova);
   $('salvarNova').addEventListener('click', salvarNova);
   $('cancelarNova').addEventListener('click', function(){ $('novaCard').classList.add('hide'); });

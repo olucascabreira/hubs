@@ -119,6 +119,11 @@ export class WuzapiClient {
     return result;
   }
 
+  /** Remove o webhook para o WuzAPI parar de enviar eventos ao HUB. */
+  deleteWebhook() {
+    return this.call('/webhook', { method: 'DELETE' });
+  }
+
   /* ------------------------------- envio ------------------------------- */
 
   sendText(input: { Phone: string; Body: string; Id?: string; LinkPreview?: boolean }) {

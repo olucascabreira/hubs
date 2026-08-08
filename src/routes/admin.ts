@@ -196,10 +196,38 @@ export async function adminRoutes(app: FastifyInstance): Promise<void> {
     return { data: publicView(tenant) };
   });
 
+  /**
+   * Remove a instancia do HUB.
+   *
+   * Antes de apagar, tira o webhook do WuzAPI — senao ele seguiria entregando
+   * eventos numa URL que passou a responder 404. O inbox do Chatwoot NAO e
+   * apagado de proposito: ele guarda o historico das conversas, e essa exclusao
+   * tem que ser uma decisao consciente feita la.
+   */
   app.delete<{ Params: { slug: string } }>('/admin/tenants/:slug', async (req, reply) => {
-    const removed = await deleteTenant(req.params.slug);
-    if (!removed) return reply.code(404).send({ error: 'tenant nao encontrado' });
-    return reply.code(204).send();
+    const tenant = await getTenantBySlug(req.params.slug);
+    if (!tenant) return reply.code(404).send({ error: 'tenant nao encontrado' });
+
+    const limpeza: Record<string, string> = {};
+
+    try {
+      await new WuzapiClient(tenant).deleteWebhook();
+      limpeza.wuzapi_webhook = 'removido';
+    } catch (err) {
+      // Instancia ja fora do ar ou token invalido: nao impede a exclusao.
+      limpeza.wuzapi_webhook = `falhou (${err instanceof Error ? err.message : String(err)})`;
+    }
+
+    await deleteTenant(tenant.slug);
+
+    return {
+      removido: tenant.slug,
+      limpeza,
+      pendente: tenant.chatwoot_inbox_id
+        ? `O inbox #${tenant.chatwoot_inbox_id} do Chatwoot foi mantido, com o historico das ` +
+          `conversas. Apague-o manualmente se nao for mais usar.`
+        : null,
+    };
   });
 
   app.post<{ Params: { slug: string } }>('/admin/tenants/:slug/provision', async (req, reply) => {
