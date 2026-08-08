@@ -1,5 +1,5 @@
-﻿# ---------------------------------------------------------------------------
-# HUB WuzAPI <-> Chatwoot â€” stack de instalacao
+# ---------------------------------------------------------------------------
+# HUB WuzAPI <-> Chatwoot — stack de instalacao
 #
 # Cole no Portainer (Stacks -> Add stack -> Web editor), preencha as variaveis
 # em "Environment variables" e faca o deploy. Nao precisa construir imagem nem
