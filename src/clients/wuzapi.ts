@@ -80,12 +80,43 @@ export class WuzapiClient {
 
   /* ------------------------------ webhook ------------------------------ */
 
-  getWebhook() {
-    return this.call<{ webhook?: string; subscribe?: string[] }>('/webhook');
+  async getWebhook(): Promise<{ webhook: string; events: string[] }> {
+    const raw = await this.call<Record<string, unknown>>('/webhook');
+    const pick = (...keys: string[]) => {
+      for (const k of keys) {
+        const v = raw?.[k];
+        if (typeof v === 'string' && v) return v;
+      }
+      return '';
+    };
+    const events = raw?.['subscribe'] ?? raw?.['Events'] ?? raw?.['events'];
+    return {
+      webhook: pick('webhook', 'webhookurl', 'WebhookURL'),
+      events: Array.isArray(events) ? (events as string[]) : [],
+    };
   }
 
-  setWebhook(webhook: string, events: string[]) {
-    return this.call('/webhook', { method: 'POST', json: { webhook, events } });
+  /**
+   * Verificado contra uma instancia real: o campo aceito e `webhookurl`, e nao
+   * `webhook` como consta no OpenAPI. Com a chave errada a API responde
+   * HTTP 200 / success:true e grava string vazia — falha silenciosa. Mandamos
+   * as duas chaves para funcionar em qualquer uma das duas convencoes.
+   */
+  async setWebhook(webhook: string, events: string[]) {
+    const result = await this.call('/webhook', {
+      method: 'POST',
+      json: { webhookurl: webhook, webhook, events },
+    });
+
+    // Confirma a gravacao: sem isto um 200 vazio passaria por sucesso.
+    const applied = await this.getWebhook();
+    if (applied.webhook !== webhook) {
+      throw new Error(
+        `WuzAPI aceitou o request mas nao gravou o webhook. ` +
+          `Esperado "${webhook}", gravado "${applied.webhook}".`,
+      );
+    }
+    return result;
   }
 
   /* ------------------------------- envio ------------------------------- */
