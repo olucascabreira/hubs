@@ -1,4 +1,4 @@
-import { normalizeJid, isGroupJid } from './jid';
+import { normalizeJid, isGroupJid, isLidJid } from './jid';
 import type { WuzMediaKind, WuzMediaRef } from '../clients/wuzapi';
 
 export interface NormalizedMedia {
@@ -16,8 +16,12 @@ export interface NormalizedMedia {
 export interface NormalizedEvent {
   type: string;
   waMessageId: string | null;
+  /** JID canonico do chat. Prefere o de telefone quando o WhatsApp enderecou por LID. */
   chatJid: string;
   senderJid: string;
+  /** LID original, quando houve traducao. Guardado para rastreabilidade. */
+  chatLid: string | null;
+  senderLid: string | null;
   isFromMe: boolean;
   isGroup: boolean;
   pushName: string | null;
@@ -209,6 +213,17 @@ function extractQuotedId(message: Dict): string | null {
 }
 
 /**
+ * Troca um JID @lid pelo equivalente com telefone, quando disponivel.
+ * Mantem o original em qualquer outro caso.
+ */
+function preferirTelefone(principal: string, alternativo: string): string {
+  if (!alternativo) return principal;
+  if (!principal) return alternativo;
+  if (isLidJid(principal) && !isLidJid(alternativo)) return alternativo;
+  return principal;
+}
+
+/**
  * Converte o payload cru do webhook do WuzAPI numa forma estavel.
  * Retorna null quando o corpo nao e reconhecivel.
  */
@@ -225,9 +240,25 @@ export function normalizeWuzapiEvent(body: unknown): NormalizedEvent | null {
   const infoNode = pick(event, 'Info', 'info');
   const info: Dict = isDict(infoNode) ? infoNode : event;
 
-  const chatJid = normalizeJid(str(pick(info, 'Chat', 'chat', 'RemoteJid', 'remoteJid')) ?? '');
-  const senderJidRaw = str(pick(info, 'Sender', 'sender', 'participant')) ?? chatJid;
-  const senderJid = normalizeJid(senderJidRaw);
+  const chatRaw = normalizeJid(str(pick(info, 'Chat', 'chat', 'RemoteJid', 'remoteJid')) ?? '');
+  const senderRaw = normalizeJid(str(pick(info, 'Sender', 'sender', 'participant')) ?? chatRaw);
+  const senderAlt = normalizeJid(str(pick(info, 'SenderAlt', 'senderAlt')) ?? '');
+  const recipientAlt = normalizeJid(str(pick(info, 'RecipientAlt', 'recipientAlt')) ?? '');
+
+  const fromMe = pick(info, 'IsFromMe', 'isFromMe', 'fromMe') === true;
+  const grupo = isGroupJid(chatRaw) || pick(info, 'IsGroup', 'isGroup') === true;
+
+  // O WhatsApp passou a enderecar por LID (id opaco) em vez do telefone. O
+  // whatsmeow entrega o par em SenderAlt/RecipientAlt. Preferimos o JID de
+  // telefone: e o que permite casar o contato no Chatwoot e o destino mais
+  // testado no envio de volta.
+  const senderJid = preferirTelefone(senderRaw, senderAlt);
+
+  // Em grupo o chat e o proprio grupo. Em conversa individual o "chat" e a
+  // outra ponta: quem enviou (entrada) ou quem recebeu (saida).
+  const chatJid = grupo
+    ? chatRaw
+    : preferirTelefone(chatRaw, fromMe ? recipientAlt : senderAlt);
 
   const rawMessage = pick(event, 'Message', 'message');
   const message = unwrapMessage(rawMessage) ?? {};
@@ -255,8 +286,10 @@ export function normalizeWuzapiEvent(body: unknown): NormalizedEvent | null {
     waMessageId: str(pick(info, 'ID', 'Id', 'id')),
     chatJid,
     senderJid,
-    isFromMe: pick(info, 'IsFromMe', 'isFromMe', 'fromMe') === true,
-    isGroup: isGroupJid(chatJid) || pick(info, 'IsGroup', 'isGroup') === true,
+    chatLid: chatJid !== chatRaw && isLidJid(chatRaw) ? chatRaw : null,
+    senderLid: senderJid !== senderRaw && isLidJid(senderRaw) ? senderRaw : null,
+    isFromMe: fromMe,
+    isGroup: grupo,
     pushName: str(pick(info, 'PushName', 'pushName', 'notifyName')),
     timestamp,
     text: extractText(message),

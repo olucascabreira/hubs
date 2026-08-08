@@ -62,6 +62,66 @@ check('mensagem de texto simples', () => {
   assert.equal(ev.media, null);
 });
 
+check('enderecamento por LID: prefere o telefone de SenderAlt', () => {
+  // Payload real capturado de uma instancia WuzAPI em producao.
+  const ev = normalizeWuzapiEvent({
+    type: 'Message',
+    event: {
+      Info: {
+        AddressingMode: '',
+        Chat: '230850197225676@lid',
+        Sender: '230850197225676@lid',
+        SenderAlt: '5519994983618@s.whatsapp.net',
+        RecipientAlt: '',
+        ID: '3A5995F55AF066B1B130',
+        IsFromMe: false,
+        IsGroup: false,
+        PushName: 'Lucas Cabreira',
+        Type: 'text',
+      },
+      Message: { conversation: 'Opa! Teste de api' },
+    },
+  });
+  assert.ok(ev);
+  assert.equal(ev.chatJid, '5519994983618@s.whatsapp.net', 'chat deve usar o JID de telefone');
+  assert.equal(ev.senderJid, '5519994983618@s.whatsapp.net');
+  assert.equal(ev.chatLid, '230850197225676@lid', 'LID original preservado');
+  assert.equal(ev.senderLid, '230850197225676@lid');
+  assert.equal(jidToE164(ev.chatJid), '+5519994983618', 'telefone disponivel para o Chatwoot');
+  assert.equal(ev.text, 'Opa! Teste de api');
+});
+
+check('LID sem alternativo: mantem o LID em vez de perder o remetente', () => {
+  const ev = normalizeWuzapiEvent({
+    type: 'Message',
+    event: {
+      Info: { Chat: '111@lid', Sender: '111@lid', SenderAlt: '', ID: 'X9', IsFromMe: false },
+      Message: { conversation: 'oi' },
+    },
+  });
+  assert.equal(ev?.chatJid, '111@lid');
+  assert.equal(ev?.chatLid, null, 'sem traducao, nao registra LID secundario');
+});
+
+check('saida por LID usa RecipientAlt como destino', () => {
+  const ev = normalizeWuzapiEvent({
+    type: 'Message',
+    event: {
+      Info: {
+        Chat: '230850197225676@lid',
+        Sender: '5511000000000@s.whatsapp.net',
+        SenderAlt: '',
+        RecipientAlt: '5519994983618@s.whatsapp.net',
+        ID: 'OUT1',
+        IsFromMe: true,
+      },
+      Message: { conversation: 'resposta' },
+    },
+  });
+  assert.equal(ev?.chatJid, '5519994983618@s.whatsapp.net');
+  assert.equal(ev?.isFromMe, true);
+});
+
 check('mensagem de grupo identifica o participante', () => {
   const ev = normalizeWuzapiEvent({
     type: 'Message',

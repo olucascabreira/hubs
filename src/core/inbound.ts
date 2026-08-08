@@ -68,6 +68,8 @@ export async function handleInboundEvent(tenant: Tenant, body: unknown): Promise
       wa_message_id: event.waMessageId,
       wa_chat_jid: event.chatJid,
       wa_sender_jid: event.senderJid,
+      ...(event.senderLid ? { wa_sender_lid: event.senderLid } : {}),
+      ...(event.chatLid ? { wa_chat_lid: event.chatLid } : {}),
       ...(event.isGroup
         ? { wa_group: true, wa_sender_name: event.pushName, wa_sender_phone: jidToE164(event.senderJid) }
         : {}),
