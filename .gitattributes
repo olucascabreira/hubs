@@ -1,0 +1,14 @@
+# O projeto roda em Linux (Docker). Sem isto, arquivos criados no Windows vao
+# com CRLF e o bash falha com "\r: command not found" nos scripts .sh.
+* text=auto eol=lf
+
+*.sh    text eol=lf
+*.yml   text eol=lf
+*.json  text eol=lf
+*.ts    text eol=lf
+Dockerfile text eol=lf
+
+# Nao mexer em binarios
+*.png binary
+*.jpg binary
+*.gz  binary
