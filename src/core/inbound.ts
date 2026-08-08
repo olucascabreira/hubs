@@ -61,14 +61,9 @@ export async function handleInboundEvent(tenant: Tenant, body: unknown): Promise
   const cw = new ChatwootClient(tenant);
   const wuz = new WuzapiClient(tenant);
 
-  // Em grupo o "contato" do Chatwoot e o proprio grupo; o autor real vai no
-  // prefixo do conteudo e em content_attributes.
-  const contactJid = event.chatJid;
-  const displayName = event.isGroup ? null : event.pushName;
-
-  const contact = await resolveContact(tenant, cw, wuz, contactJid, displayName);
-  const conversationId = await resolveConversation(tenant, cw, contactJid, contact);
-
+  // O conteudo e resolvido ANTES de tocar no Chatwoot. Eventos sem nada a
+  // exibir — mensagem de protocolo, enquete, chamada — criariam contato e
+  // conversa vazios se a ordem fosse inversa.
   const attachments = await buildAttachments(wuz, event, log);
   const mediaFailed = Boolean(event.media) && attachments.length === 0;
   const content = buildContent(tenant, event, attachments.length > 0, mediaFailed);
@@ -76,6 +71,14 @@ export async function handleInboundEvent(tenant: Tenant, body: unknown): Promise
   if (!content && attachments.length === 0) {
     return skip('mensagem sem conteudo suportado');
   }
+
+  // Em grupo o "contato" do Chatwoot e o proprio grupo; o autor real vai no
+  // prefixo do conteudo e em content_attributes.
+  const contactJid = event.chatJid;
+  const displayName = event.isGroup ? null : event.pushName;
+
+  const contact = await resolveContact(tenant, cw, wuz, contactJid, displayName);
+  const conversationId = await resolveConversation(tenant, cw, contactJid, contact);
 
   const message = await cw.createMessage(conversationId, {
     content: content ?? '',
