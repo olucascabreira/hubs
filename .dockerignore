@@ -1,0 +1,17 @@
+# O contexto de build vai inteiro para o daemon: sem isto, node_modules e
+# capturas de conversas seriam enviados junto.
+node_modules
+dist
+captures
+.git
+.env
+*.log
+
+# Specs de referencia — nao entram na imagem
+spec-wuz.yml
+swagger-chatwoot.json
+
+# Documentacao e stacks nao afetam o build
+README.md
+deploy
+docker-compose.yml
