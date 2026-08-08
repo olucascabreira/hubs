@@ -56,13 +56,67 @@ curl https://hub.seudominio.com.br/health
 Deve responder `status: ok` com Postgres e Redis em `ok`. Se `/health` responde mas os webhooks não
 chegam, o problema é rede/DNS entre os contêineres, não o HUB.
 
-## Se for Docker Swarm
+## Passo a passo — Swarm multi-nó (use `portainer-stack-swarm.yml`)
 
-Três diferenças na stack:
+O Swarm não constrói imagem, então ela precisa existir antes da stack subir.
+Em multi-nó há duas rotas; a diferença é só se o serviço pode migrar de nó.
 
-1. `build:` não funciona — publique a imagem num registry e troque por `image:`.
-2. Labels do Traefik vão para `deploy.labels`, não `labels`.
-3. `depends_on.condition` não é suportado — o HUB já tolera Postgres/Redis subindo depois.
+### 1. Levar o código para um nó
+
+O repositório vira um arquivo único com `git bundle` (já gerado em `hub.bundle`):
+
+```bash
+# da sua máquina
+scp hub.bundle usuario@servidor:/opt/
+
+# no servidor
+cd /opt && git clone hub.bundle hub && cd hub
+```
+
+Alternativa: `git clone` de um repositório privado seu, se preferir versionar lá.
+
+### 2. Construir a imagem
+
+**Rota A — sem registry** (mais rápida, serve para homologação):
+
+```bash
+cd /opt/hub && chmod +x deploy/build-on-node.sh
+./deploy/build-on-node.sh
+```
+
+O script imprime o `hostname` do nó. A imagem existe **só nele**, então a stack
+precisa de `BUILD_NODE_HOSTNAME=<esse hostname>` — sem isso o Swarm pode agendar
+num nó sem a imagem e o serviço trava em *"no suitable node"*.
+
+Custo: o serviço não migra se o nó cair. Aceitável para teste, não para produção.
+
+**Rota B — com registry** (correta para produção):
+
+```bash
+./deploy/build-on-node.sh ghcr.io/SEU_USER/wuzapi-chatwoot-hub:1.0.0
+```
+
+Cadastre as credenciais em Portainer → Registries, use `HUB_IMAGE` com esse
+endereço e **deixe `BUILD_NODE_HOSTNAME` vazio** — qualquer nó serve.
+
+### 3. Subir a stack
+
+Portainer → Stacks → Add stack → Web editor → cole `portainer-stack-swarm.yml`
+e preencha as variáveis (lista no fim do arquivo).
+
+### 4. Conferir
+
+```bash
+curl https://hub.impulsemidia.com.br/health
+```
+
+`status: ok` com Postgres e Redis em `ok`. Se travar em *"no suitable node"*,
+revise o `BUILD_NODE_HOSTNAME` do passo 2.
+
+## Outras diferenças do Swarm
+
+1. Labels do Traefik vão para `deploy.labels`, não `labels`.
+2. `depends_on.condition` não é suportado — o HUB tolera Postgres/Redis subindo depois.
 
 ## Rollback
 

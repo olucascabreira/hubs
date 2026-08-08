@@ -6,3 +6,9 @@ dist/
 
 # Webhooks crus capturados em homologacao — contem conteudo de conversas
 captures/
+
+# Pacote de transferencia gerado por `git bundle`
+hub.bundle
+
+# Variaveis da stack com segredos
+deploy/stack.env
