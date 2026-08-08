@@ -13,6 +13,7 @@ import {
   type Tenant,
 } from '../db/repo';
 import { requireAdmin } from './security';
+import { captureStats, listCaptures } from '../core/capture';
 
 const slugSchema = z
   .string()
@@ -227,6 +228,21 @@ export async function adminRoutes(app: FastifyInstance): Promise<void> {
     if (!tenant) return reply.code(404).send({ error: 'tenant nao encontrado' });
     return new WuzapiClient(tenant).connect(config.defaultWuzapiEvents);
   });
+
+  /**
+   * Payloads crus recebidos, para conferir o formato real contra o parsing.
+   * Contem conteudo de conversas: so responde com CAPTURE_RAW_WEBHOOKS=true.
+   */
+  app.get<{ Params: { slug: string }; Querystring: { limit?: string } }>(
+    '/admin/tenants/:slug/captures',
+    async (req, reply) => {
+      const tenant = await getTenantBySlug(req.params.slug);
+      if (!tenant) return reply.code(404).send({ error: 'tenant nao encontrado' });
+
+      const limit = Math.min(Number(req.query.limit ?? 10) || 10, 40);
+      return { stats: captureStats(), capturas: listCaptures(tenant.slug, limit) };
+    },
+  );
 
   app.get<{ Params: { slug: string } }>('/admin/tenants/:slug/qr', async (req, reply) => {
     const tenant = await getTenantBySlug(req.params.slug);

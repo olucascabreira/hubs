@@ -14,6 +14,13 @@ RUN npm install --omit=dev --no-audit --no-fund && npm cache clean --force
 COPY --from=build /app/dist ./dist
 
 RUN addgroup -S hub && adduser -S hub -G hub
+
+# O ponto de montagem do volume nasce pertencendo ao root. Criar o diretorio
+# com o dono certo ANTES do VOLUME faz o Docker preservar essa permissao ao
+# inicializar o volume — sem isso a escrita falha com EACCES.
+RUN mkdir -p /data/captures && chown -R hub:hub /data
+VOLUME /data/captures
+
 USER hub
 
 EXPOSE 3000
