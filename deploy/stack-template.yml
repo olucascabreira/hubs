@@ -16,7 +16,7 @@
 #   CERT_RESOLVER       nome do resolver do Traefik
 #
 # VARIAVEIS OPCIONAIS
-#   HUB_IMAGE           default: ghcr.io/olucascabreira/hub:latest
+#   HUB_IMAGE           default: ghcr.io/olucascabreira/hubs:latest
 #   DEFAULT_WUZAPI_BASE_URL     pre-preenche o cadastro de instancias
 #   DEFAULT_CHATWOOT_BASE_URL   idem
 #   ADMIN_ALLOWED_IPS   restringe /admin por IP, ex.: 203.0.113.4/32
@@ -24,7 +24,7 @@
 
 services:
   hub:
-    image: ${HUB_IMAGE:-ghcr.io/olucascabreira/hub:latest}
+    image: ${HUB_IMAGE:-ghcr.io/olucascabreira/hubs:latest}
 
     environment:
       PORT: 3000

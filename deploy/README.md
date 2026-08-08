@@ -33,7 +33,7 @@ comentários nem linhas em branco**.
 ### Com Postgres e Redis próprios (`stack-externo.yml`)
 
 ```
-HUB_IMAGE=ghcr.io/olucascabreira/hub:1.0.0
+HUB_IMAGE=ghcr.io/olucascabreira/hubs:1.0.0
 HUB_DOMAIN=hub.seudominio.com.br
 ADMIN_TOKEN=<openssl rand -hex 32>
 DATABASE_URL=postgres://hub:senha@postgres:5432/hub
@@ -64,7 +64,7 @@ noutra rede Docker, acrescente-a em `networks` na stack.
 ### Com tudo junto (`stack-template.yml`)
 
 ```
-HUB_IMAGE=ghcr.io/olucascabreira/hub:1.0.0
+HUB_IMAGE=ghcr.io/olucascabreira/hubs:1.0.0
 HUB_DOMAIN=hub.seudominio.com.br
 ADMIN_TOKEN=<openssl rand -hex 32>
 POSTGRES_PASSWORD=<openssl rand -hex 16>
@@ -98,7 +98,7 @@ git tag v1.0.0 && git push origin v1.0.0
 ```
 
 O workflow [`publish.yml`](../.github/workflows/publish.yml) roda typecheck e testes, constrói para
-`amd64` e `arm64` e publica em `ghcr.io/olucascabreira/hub` com as tags `1.0.0`, `1.0` e `latest`.
+`amd64` e `arm64` e publica em `ghcr.io/olucascabreira/hubs` com as tags `1.0.0`, `1.0` e `latest`.
 Imagem privada? Cadastre as credenciais em Portainer → Registries.
 
 Prefira a tag de versão a `:latest`: o Swarm fixa a imagem pelo ID resolvido no deploy, e uma tag

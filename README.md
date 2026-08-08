@@ -31,7 +31,7 @@ git tag v1.0.0 && git push origin v1.0.0
 ```
 
 O workflow [`publish.yml`](.github/workflows/publish.yml) roda typecheck e os testes, constrói para
-`amd64` e `arm64` e publica em `ghcr.io/olucascabreira/hub` com as tags `1.0.0`, `1.0` e `latest`.
+`amd64` e `arm64` e publica em `ghcr.io/olucascabreira/hubs` com as tags `1.0.0`, `1.0` e `latest`.
 
 Sem registry disponível? Veja [deploy/README.md](deploy/README.md) para o caminho a partir do
 código-fonte — funciona, mas exige construir num nó e prender o serviço a ele.
@@ -51,7 +51,7 @@ número de banco próprio — o passo a passo está em [deploy/README.md](deploy
 Para a stack autossuficiente, as variáveis obrigatórias são cinco:
 
 ```
-HUB_IMAGE=ghcr.io/olucascabreira/hub:1.0.0
+HUB_IMAGE=ghcr.io/olucascabreira/hubs:1.0.0
 HUB_DOMAIN=hub.seudominio.com.br
 ADMIN_TOKEN=<openssl rand -hex 32>
 POSTGRES_PASSWORD=<openssl rand -hex 16>
