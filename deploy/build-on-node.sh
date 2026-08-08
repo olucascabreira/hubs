@@ -63,7 +63,7 @@ if docker service inspect "${SERVICE}" >/dev/null 2>&1; then
   docker service ps "${SERVICE}" --no-trunc | head -5
   echo
   echo "Confirme que a imagem nova esta no ar — o campo build deve ser ${SHA}:"
-  echo "  curl -s https://hub.impulsemidia.com.br/health"
+  echo "  curl -s https://SEU_HUB/health"
 else
   echo "Servico ${SERVICE} nao encontrado neste no."
   echo "Depois de subir a stack, aplique a imagem com:"

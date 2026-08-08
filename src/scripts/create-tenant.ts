@@ -7,7 +7,7 @@
  *
  * Rode antes com --check para so inspecionar o estado, sem escrever nada.
  *
- *   $env:HUB_URL="https://hub.impulsemidia.com.br"
+ *   $env:HUB_URL="https://hub.seudominio.com.br"
  *   $env:ADMIN_TOKEN="..."
  *   npx tsx src/scripts/create-tenant.ts --check
  *   npx tsx src/scripts/create-tenant.ts
@@ -19,13 +19,13 @@ const ADMIN_TOKEN = process.env.HUB_ADMIN_TOKEN ?? process.env.ADMIN_TOKEN ?? ''
 const CHECK_ONLY = process.argv.includes('--check');
 
 const TENANT = {
-  slug: process.env.TENANT_SLUG ?? 'impulse-lucas',
-  name: process.env.TENANT_NAME ?? 'WhatsApp Lucas (homologacao)',
+  slug: process.env.TENANT_SLUG ?? 'minha-instancia',
+  name: process.env.TENANT_NAME ?? 'WhatsApp (homologacao)',
 
-  wuzapi_base_url: process.env.WUZAPI_BASE_URL ?? 'https://wuz.impulsemidia.com.br',
+  wuzapi_base_url: process.env.WUZAPI_BASE_URL ?? 'https://wuzapi.seudominio.com.br',
   wuzapi_token: process.env.WUZAPI_TOKEN ?? '',
 
-  chatwoot_base_url: process.env.CHATWOOT_BASE_URL ?? 'https://chat.impulsemidia.com.br',
+  chatwoot_base_url: process.env.CHATWOOT_BASE_URL ?? 'https://chatwoot.seudominio.com.br',
   chatwoot_account_id: Number(process.env.CHATWOOT_ACCOUNT_ID ?? 1),
   chatwoot_api_token: process.env.CHATWOOT_TOKEN ?? '',
 

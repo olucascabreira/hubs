@@ -82,7 +82,7 @@ check('enderecamento por LID: prefere o telefone de SenderAlt', () => {
         AddressingMode: '',
         Chat: '230850197225676@lid',
         Sender: '230850197225676@lid',
-        SenderAlt: '5519994983618@s.whatsapp.net',
+        SenderAlt: '5511987654321@s.whatsapp.net',
         RecipientAlt: '',
         ID: '3A5995F55AF066B1B130',
         IsFromMe: false,
@@ -94,11 +94,11 @@ check('enderecamento por LID: prefere o telefone de SenderAlt', () => {
     },
   });
   assert.ok(ev);
-  assert.equal(ev.chatJid, '5519994983618@s.whatsapp.net', 'chat deve usar o JID de telefone');
-  assert.equal(ev.senderJid, '5519994983618@s.whatsapp.net');
+  assert.equal(ev.chatJid, '5511987654321@s.whatsapp.net', 'chat deve usar o JID de telefone');
+  assert.equal(ev.senderJid, '5511987654321@s.whatsapp.net');
   assert.equal(ev.chatLid, '230850197225676@lid', 'LID original preservado');
   assert.equal(ev.senderLid, '230850197225676@lid');
-  assert.equal(jidToE164(ev.chatJid), '+5519994983618', 'telefone disponivel para o Chatwoot');
+  assert.equal(jidToE164(ev.chatJid), '+5511987654321', 'telefone disponivel para o Chatwoot');
   assert.equal(ev.text, 'Opa! Teste de api');
 });
 
@@ -122,14 +122,14 @@ check('saida por LID usa RecipientAlt como destino', () => {
         Chat: '230850197225676@lid',
         Sender: '5511000000000@s.whatsapp.net',
         SenderAlt: '',
-        RecipientAlt: '5519994983618@s.whatsapp.net',
+        RecipientAlt: '5511987654321@s.whatsapp.net',
         ID: 'OUT1',
         IsFromMe: true,
       },
       Message: { conversation: 'resposta' },
     },
   });
-  assert.equal(ev?.chatJid, '5519994983618@s.whatsapp.net');
+  assert.equal(ev?.chatJid, '5511987654321@s.whatsapp.net');
   assert.equal(ev?.isFromMe, true);
 });
 
