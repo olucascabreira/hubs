@@ -13,3 +13,6 @@ hub.bundle
 # Variaveis da stack com segredos
 deploy/stack.env
 deploy/stack-swarm-final.yml
+
+# Artefatos de scp com destino malformado
+root@*
