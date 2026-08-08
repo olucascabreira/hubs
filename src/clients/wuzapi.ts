@@ -155,10 +155,6 @@ export class WuzapiClient {
     return this.call<{ Id?: string }>('/chat/send/document', { method: 'POST', json: input });
   }
 
-  markRead(input: { Id: string[]; Chat: string; Sender?: string }) {
-    return this.call('/chat/markread', { method: 'POST', json: input });
-  }
-
   /* ------------------------------ download ----------------------------- */
 
   /**

@@ -60,4 +60,3 @@ export const config = {
     .filter(Boolean),
 };
 
-export type Config = typeof config;

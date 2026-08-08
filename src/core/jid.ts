@@ -1,6 +1,5 @@
-export const GROUP_SUFFIX = '@g.us';
-export const USER_SUFFIXES = ['@s.whatsapp.net', '@c.us'];
-export const LID_SUFFIX = '@lid';
+const GROUP_SUFFIX = '@g.us';
+const LID_SUFFIX = '@lid';
 
 /** Normaliza qualquer forma de JID/telefone para `<user>@<server>`. */
 export function normalizeJid(input: string): string {
@@ -57,10 +56,4 @@ export function jidToE164(jid: string): string | null {
 export function jidToWuzapiTarget(jid: string): string {
   if (isGroupJid(jid) || isLidJid(jid)) return jid;
   return jidToPhone(jid) ?? jid;
-}
-
-/** Converte o source_id guardado no Chatwoot de volta para JID. */
-export function sourceIdToJid(sourceId: string): string {
-  const cleaned = sourceId.replace(/^wa:/, '');
-  return normalizeJid(cleaned);
 }
