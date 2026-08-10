@@ -154,6 +154,10 @@ export class WuzapiClient {
     Id?: string;
     PTT?: boolean;
     MimeType?: string;
+    /** Duracao exibida na bolha; sem isto o WhatsApp nao mostra o tempo. */
+    Seconds?: number;
+    /** 64 amplitudes 0-100; sem isto a onda aparece reta. */
+    Waveform?: number[];
   }) {
     return this.call<{ Id?: string }>('/chat/send/audio', { method: 'POST', json: input });
   }

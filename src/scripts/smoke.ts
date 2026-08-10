@@ -422,6 +422,15 @@ check('entrada invalida nao derruba o envio: devolve o original', async () => {
   assert.equal(r.convertido, false);
   assert.equal(r.buffer, lixo);
   assert.equal(r.mimetype, 'audio/mpeg');
+  assert.equal(r.segundos, null, 'sem audio valido nao inventa duracao');
+  assert.equal(r.waveform, null);
+});
+check('audio invalido nao gera onda falsa', async () => {
+  const { paraNotaDeVoz } = await import('../core/transcode');
+  // Enviar Waveform inventado deixaria a bolha com desenho que nao existe.
+  const r = await paraNotaDeVoz(Buffer.alloc(0), 'audio/ogg');
+  assert.equal(r.waveform, null);
+  assert.equal(r.segundos, null);
 });
 
 console.log('\nSaida (Chatwoot -> WhatsApp)');

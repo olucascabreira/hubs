@@ -254,6 +254,9 @@ export async function handleOutboundEvent(tenant: Tenant, body: unknown): Promis
               Id: waId,
               MimeType: audio.mimetype,
               PTT: modo === 'ptt',
+              // Sem estes dois a bolha chega sem tempo e com a onda reta.
+              ...(audio.segundos ? { Seconds: audio.segundos } : {}),
+              ...(audio.waveform ? { Waveform: audio.waveform } : {}),
             });
           }
           if (caption) await wuz.sendText({ Phone: phone, Body: caption });

@@ -42,27 +42,101 @@ export interface AudioConvertido {
   buffer: Buffer;
   mimetype: string;
   convertido: boolean;
+  /** Duracao em segundos — o WhatsApp exibe isso na bolha. */
+  segundos: number | null;
+  /** 64 amplitudes 0-100: e o desenho da onda na nota de voz. */
+  waveform: number[] | null;
+}
+
+const PCM_ARGS = [
+  '-hide_banner',
+  '-loglevel', 'error',
+  '-i', 'pipe:0',
+  '-vn',
+  '-ac', '1',
+  '-ar', '8000', // resolucao de sobra para 64 amostras
+  '-f', 's16le',
+  'pipe:1',
+];
+
+const AMOSTRAS_WAVEFORM = 64;
+const TAXA_PCM = 8000;
+
+/**
+ * Duracao e desenho da onda.
+ *
+ * O WhatsApp nao deduz nada do arquivo: sem `Seconds` a bolha fica sem tempo,
+ * e sem `Waveform` ela aparece reta. Os dois vem de uma passada em PCM.
+ */
+async function analisarAudio(
+  input: Buffer,
+): Promise<{ segundos: number | null; waveform: number[] | null }> {
+  if (ffmpegAusente) return { segundos: null, waveform: null };
+
+  try {
+    const pcm = await executarFfmpeg(input, PCM_ARGS);
+    const totalAmostras = Math.floor(pcm.length / 2);
+    if (totalAmostras === 0) return { segundos: null, waveform: null };
+
+    const segundos = Math.max(1, Math.round(totalAmostras / TAXA_PCM));
+
+    // RMS por balde: representa energia percebida melhor que o pico.
+    const porBalde = Math.floor(totalAmostras / AMOSTRAS_WAVEFORM) || 1;
+    const rms: number[] = [];
+    for (let b = 0; b < AMOSTRAS_WAVEFORM; b += 1) {
+      const inicio = b * porBalde;
+      let soma = 0;
+      let n = 0;
+      for (let i = inicio; i < inicio + porBalde && i < totalAmostras; i += 1) {
+        const v = pcm.readInt16LE(i * 2) / 32768;
+        soma += v * v;
+        n += 1;
+      }
+      rms.push(n ? Math.sqrt(soma / n) : 0);
+    }
+
+    // Normaliza pelo pico: audio baixo continua desenhando onda visivel.
+    const pico = Math.max(...rms, 1e-6);
+    const waveform = rms.map((v) => Math.max(0, Math.min(100, Math.round((v / pico) * 100))));
+
+    return { segundos, waveform };
+  } catch (err) {
+    logger.warn({ err }, 'nao foi possivel calcular duracao/onda do audio');
+    return { segundos: null, waveform: null };
+  }
 }
 
 export async function paraNotaDeVoz(
   input: Buffer,
   mimetypeOriginal: string,
 ): Promise<AudioConvertido> {
+  // A analise vale para qualquer formato: mesmo audio ja em OGG precisa de
+  // duracao e onda para a bolha ficar completa.
+  const { segundos, waveform } = await analisarAudio(input);
+
   const semConversao: AudioConvertido = {
     buffer: input,
     mimetype: mimetypeOriginal,
     convertido: false,
+    segundos,
+    waveform,
   };
 
   if (jaEhNotaDeVoz(mimetypeOriginal)) {
-    return { buffer: input, mimetype: 'audio/ogg; codecs=opus', convertido: false };
+    return { ...semConversao, mimetype: 'audio/ogg; codecs=opus' };
   }
   if (ffmpegAusente) return semConversao;
 
   try {
-    const saida = await executarFfmpeg(input);
+    const saida = await executarFfmpeg(input, OPUS_ARGS);
     if (!saida.length) throw new Error('ffmpeg devolveu saida vazia');
-    return { buffer: saida, mimetype: 'audio/ogg; codecs=opus', convertido: true };
+    return {
+      buffer: saida,
+      mimetype: 'audio/ogg; codecs=opus',
+      convertido: true,
+      segundos,
+      waveform,
+    };
   } catch (err) {
     const msg = err instanceof Error ? err.message : String(err);
     if (msg.includes('ENOENT')) {
@@ -76,9 +150,9 @@ export async function paraNotaDeVoz(
   }
 }
 
-function executarFfmpeg(input: Buffer): Promise<Buffer> {
+function executarFfmpeg(input: Buffer, args: string[]): Promise<Buffer> {
   return new Promise((resolve, reject) => {
-    const proc = spawn('ffmpeg', OPUS_ARGS, { stdio: ['pipe', 'pipe', 'pipe'] });
+    const proc = spawn('ffmpeg', args, { stdio: ['pipe', 'pipe', 'pipe'] });
 
     const partes: Buffer[] = [];
     let bytes = 0;
