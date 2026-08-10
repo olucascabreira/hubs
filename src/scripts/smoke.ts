@@ -291,6 +291,29 @@ check('nome de arquivo do anexo recebido', () => {
   );
 });
 
+console.log('\nDiagnostico da sessao do WhatsApp');
+check('conectada sem JID e sessao morta, nao saudavel', async () => {
+  const { diagnosticarSessao } = await import('../core/sessao');
+  // Caso real: o WuzAPI reporta connected/loggedIn true, mas o aparelho foi
+  // desvinculado e nenhum evento chega.
+  const d = diagnosticarSessao({ connected: true, loggedIn: true, jid: '' });
+  assert.equal(d.ok, false, 'JID vazio nao pode passar por saudavel');
+  assert.equal(d.estado, 'sem_dispositivo');
+  assert.match(d.mensagem, /QR|pareie/i, 'precisa dizer o que fazer');
+});
+check('sessao pareada de verdade e saudavel', async () => {
+  const { diagnosticarSessao } = await import('../core/sessao');
+  const d = diagnosticarSessao({ connected: true, loggedIn: true, jid: '5511966179706:22@s.whatsapp.net' });
+  assert.equal(d.ok, true);
+  assert.equal(d.estado, 'ok');
+});
+check('desconectada e WuzAPI inacessivel sao estados distintos', async () => {
+  const { diagnosticarSessao } = await import('../core/sessao');
+  assert.equal(diagnosticarSessao({ connected: false, jid: '' }).estado, 'desconectada');
+  assert.equal(diagnosticarSessao({ error: 'timeout' }).estado, 'inacessivel');
+  assert.equal(diagnosticarSessao(null).estado, 'inacessivel');
+});
+
 console.log('\nNome do contato de grupo');
 check('acrescenta o sufixo ao assunto do grupo', async () => {
   const { comSufixoDeGrupo } = await import('../core/resolve');

@@ -15,6 +15,7 @@ import {
 import { requireAdmin } from './security';
 import { captureStats, listCaptures } from '../core/capture';
 import { grupoPermitido } from '../core/inbound';
+import { diagnosticarSessao } from '../core/sessao';
 import { listarFalhas, repetirFalha } from '../queue';
 import { isGroupJid, normalizeJid } from '../core/jid';
 
@@ -275,10 +276,13 @@ export async function adminRoutes(app: FastifyInstance): Promise<void> {
     const value = <T>(r: PromiseSettledResult<T>) =>
       r.status === 'fulfilled' ? r.value : { error: String(r.reason?.message ?? r.reason) };
 
+    const sessao = value(session) as Record<string, unknown>;
+
     return {
       tenant: tenant.slug,
       expected_webhooks: webhookUrls(tenant.slug),
-      wuzapi_session: value(session),
+      sessao_diagnostico: diagnosticarSessao(sessao),
+      wuzapi_session: sessao,
       wuzapi_webhook: value(webhook),
       chatwoot_inbox: value(inbox),
     };

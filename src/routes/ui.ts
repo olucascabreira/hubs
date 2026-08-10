@@ -273,16 +273,22 @@ label.fld small{font-size:11px}
       var esp = s.expected_webhooks || {};
       var urlW = wh.webhook || wh.WebhookURL || '';
       var okW = urlW === esp.wuzapi, okC = (ib.webhook_url || '') === esp.chatwoot;
-      var lig = ses.connected && (ses.loggedIn || ses.LoggedIn);
+
+      // O campo connected sozinho engana: sessao sem JID nao recebe nada.
+      var diag = s.sessao_diagnostico || {};
+      var lig = diag.ok === true;
 
       $('resumo').innerHTML =
-        kv('Sessao WhatsApp', lig ? tag('conectada','ok') : tag('desconectada','er')) +
+        kv('Sessao WhatsApp',
+           (lig ? tag('pareada','ok') : tag(diag.estado || 'indefinida','er')) +
+           (lig ? '' : '<div class="muted" style="font-size:12px;margin-top:6px">' + esc(diag.mensagem || '') + '</div>')) +
         kv('Conta', esc(ses.name || '-')) +
         kv('Webhook WuzAPI', okW ? tag('correto','ok') : tag('divergente','er')) +
         kv('Inbox Chatwoot', ib.id ? ('#' + esc(ib.id) + ' ' + (okC ? tag('correto','ok') : tag('divergente','er'))) : tag('ausente','er')) +
         kv('Eventos', '<span class="mono">' + esc(JSON.stringify(wh.subscribe || wh.events || [])) + '</span>');
 
-      if (!okW || !okC) toast('Webhook divergente. Use "Reprovisionar".', true);
+      if (!lig) toast(diag.mensagem || 'Sessao do WhatsApp com problema.', true);
+      else if (!okW || !okC) toast('Webhook divergente. Use "Reprovisionar".', true);
       qr(lig);
     }).catch(function(e){ toast('Status: ' + e.message, true); });
 
