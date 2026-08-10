@@ -288,6 +288,25 @@ export async function adminRoutes(app: FastifyInstance): Promise<void> {
     };
   });
 
+  /**
+   * Logout no WuzAPI. E a unica saida quando a sessao fica presa em
+   * "logado sem aparelho": nesse estado o WuzAPI nao gera QR novo.
+   */
+  app.post<{ Params: { slug: string } }>('/admin/tenants/:slug/logout', async (req, reply) => {
+    const tenant = await getTenantBySlug(req.params.slug);
+    if (!tenant) return reply.code(404).send({ error: 'tenant nao encontrado' });
+
+    const wuz = new WuzapiClient(tenant);
+    await wuz.logout();
+    const sessao = (await wuz.status().catch(() => null)) as Record<string, unknown> | null;
+
+    return {
+      status: 'logout solicitado',
+      proximo_passo: 'Use "Conectar sessao" e leia o QR para parear de novo.',
+      sessao_diagnostico: diagnosticarSessao(sessao),
+    };
+  });
+
   app.post<{ Params: { slug: string } }>('/admin/tenants/:slug/connect', async (req, reply) => {
     const tenant = await getTenantBySlug(req.params.slug);
     if (!tenant) return reply.code(404).send({ error: 'tenant nao encontrado' });
@@ -364,14 +383,14 @@ export async function adminRoutes(app: FastifyInstance): Promise<void> {
     if (!tenant) return reply.code(404).send({ error: 'tenant nao encontrado' });
 
     const wuz = new WuzapiClient(tenant);
-    const sessao = await wuz.status().catch(() => null);
+    const sessao = (await wuz.status().catch(() => null)) as Record<string, unknown> | null;
+    const diag = diagnosticarSessao(sessao);
 
-    if (sessao?.LoggedIn || (sessao as { loggedIn?: boolean } | null)?.loggedIn) {
-      return {
-        estado: 'conectado',
-        mensagem: 'Sessao ja pareada; nao ha QR a exibir.',
-        sessao,
-      };
+    // So esconde o QR quando a sessao esta REALMENTE pareada. Antes bastava
+    // `loggedIn` para dizer "ja pareada", e uma sessao sem JID ficava presa:
+    // nao recebia mensagem e nao deixava reparear.
+    if (diag.ok) {
+      return { estado: 'conectado', mensagem: diag.mensagem, sessao };
     }
 
     try {
@@ -385,7 +404,10 @@ export async function adminRoutes(app: FastifyInstance): Promise<void> {
       return {
         estado: 'indisponivel',
         mensagem:
-          'O WuzAPI nao gerou QR agora. Se a sessao estiver desconectada, chame /connect antes.',
+          diag.estado === 'sem_dispositivo'
+            ? 'Sessao presa: o WuzAPI se diz logado mas nao ha aparelho pareado, e por isso ' +
+              'nao gera QR. Faca logout nesta instancia (botao Desconectar) e conecte de novo.'
+            : 'O WuzAPI nao gerou QR agora. Se a sessao estiver desconectada, chame /connect antes.',
         detalhe: err instanceof Error ? err.message : String(err),
         sessao,
       };

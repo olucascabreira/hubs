@@ -102,6 +102,7 @@ label.fld small{font-size:11px}
         <button id="recarregar">Recarregar</button>
         <button id="provisionar">Reprovisionar</button>
         <button id="conectar">Conectar sessao</button>
+        <button id="desconectar">Desconectar</button>
         <button id="excluir" style="color:var(--er);border-color:var(--er)">Excluir</button>
         <span class="sp" style="flex:1"></span>
         <button class="pri" id="abrirNova">+ Nova instancia</button>
@@ -504,6 +505,15 @@ label.fld small{font-size:11px}
     if (!confirm('Reprovisionar grava o webhook no WuzAPI e ajusta o inbox no Chatwoot. Continuar?')) return;
     api('/admin/tenants/' + slug + '/provision', { method:'POST' })
       .then(function(){ toast('Provisionado.'); detalhes(); })
+      .catch(function(e){ toast('Falhou: ' + e.message, true); });
+  });
+
+  $('desconectar').addEventListener('click', function(){
+    if (!confirm('Desconectar a sessao do WhatsApp desta instancia?\n\n' +
+                 'Use quando o estado for "sem_dispositivo": o WuzAPI so gera QR novo depois do logout.\n' +
+                 'Voce precisara ler o QR de novo para voltar a receber mensagens.')) return;
+    api('/admin/tenants/' + slug + '/logout', { method:'POST' })
+      .then(function(){ toast('Logout feito. Use "Conectar sessao" e leia o QR.'); setTimeout(detalhes, 1500); })
       .catch(function(e){ toast('Falhou: ' + e.message, true); });
   });
 

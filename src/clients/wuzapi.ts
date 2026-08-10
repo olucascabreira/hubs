@@ -78,6 +78,11 @@ export class WuzapiClient {
     return this.call<{ QRCode?: string }>('/session/qr');
   }
 
+  /** Encerra a sessao no WhatsApp, liberando o pareamento para um QR novo. */
+  logout() {
+    return this.call('/session/logout', { method: 'POST' });
+  }
+
   /* ------------------------------ webhook ------------------------------ */
 
   async getWebhook(): Promise<{ webhook: string; events: string[] }> {
