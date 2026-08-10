@@ -8,10 +8,13 @@ import {
   dropContactLink,
   dropConversationLink,
   findChatwootMessageIdByWaId,
+  findPhoneForLid,
+  rekeyContactLink,
+  upsertLidLink,
   type Tenant,
 } from '../db/repo';
 import { HttpError } from '../clients/http';
-import { isBroadcastJid, isNewsletterJid, jidToE164, normalizeJid } from './jid';
+import { isBroadcastJid, isLidJid, isNewsletterJid, jidToE164, normalizeJid } from './jid';
 import { filenameForInbound } from './media';
 import { normalizeWuzapiEvent, type NormalizedEvent } from './normalize';
 import { resolveContact, resolveConversation } from './resolve';
@@ -24,6 +27,49 @@ export interface InboundResult {
 }
 
 const skip = (reason: string): InboundResult => ({ status: 'skipped', reason });
+
+/**
+ * Resolve o endereçamento por LID.
+ *
+ * Quando o evento traz LID e telefone juntos, guarda o par. Quando traz so o
+ * LID, consulta o que ja foi aprendido — e, se o contato ja existia sob a
+ * identidade LID, migra o vinculo para a de telefone, evitando o mesmo
+ * contato duplicado no Chatwoot.
+ *
+ * Se o par nunca foi visto, segue com o LID: o WhatsApp simplesmente nao
+ * revelou o numero, e nao ha de onde inventa-lo.
+ */
+async function resolverLid(
+  tenant: Tenant,
+  event: NormalizedEvent,
+  log: Logger,
+): Promise<string> {
+  if (event.isGroup) return event.chatJid;
+
+  // Caso 1: os dois vieram juntos — aprende.
+  if (event.chatLid && !isLidJid(event.chatJid)) {
+    await upsertLidLink(tenant.id, event.chatLid, event.chatJid);
+    return event.chatJid;
+  }
+  if (event.senderLid && !isLidJid(event.senderJid)) {
+    await upsertLidLink(tenant.id, event.senderLid, event.senderJid);
+  }
+
+  // Caso 2: veio so o LID — usa o que ja foi aprendido.
+  if (isLidJid(event.chatJid)) {
+    const telefone = await findPhoneForLid(tenant.id, event.chatJid);
+    if (telefone) {
+      const migrou = await rekeyContactLink(tenant.id, event.chatJid, telefone);
+      log.info(
+        { lid: event.chatJid, telefone, migrou },
+        'LID resolvido para telefone a partir do historico',
+      );
+      return telefone;
+    }
+  }
+
+  return event.chatJid;
+}
 
 /**
  * Um 404/422 do Chatwoot ao usar um ID em cache quase sempre significa que o
@@ -80,6 +126,10 @@ export async function handleInboundEvent(tenant: Tenant, body: unknown): Promise
   const cw = new ChatwootClient(tenant);
   const wuz = new WuzapiClient(tenant);
 
+  // Aprende o par LID <-> telefone sempre que o WhatsApp entrega os dois, e
+  // usa o que ja aprendeu quando o evento vem so com o LID.
+  const chatJidResolvido = await resolverLid(tenant, event, log);
+
   // O conteudo e resolvido ANTES de tocar no Chatwoot. Eventos sem nada a
   // exibir — mensagem de protocolo, enquete, chamada — criariam contato e
   // conversa vazios se a ordem fosse inversa.
@@ -93,7 +143,7 @@ export async function handleInboundEvent(tenant: Tenant, body: unknown): Promise
 
   // Em grupo o "contato" do Chatwoot e o proprio grupo; o autor real vai no
   // prefixo do conteudo e em content_attributes.
-  const contactJid = event.chatJid;
+  const contactJid = chatJidResolvido;
   // Em mensagem enviada por nos, `PushName` e o nome do DONO da conta, nao o
   // do destinatario. Usa-lo aqui batizaria o contato com o nome errado.
   const displayName = event.isGroup || event.isFromMe ? null : event.pushName;

@@ -187,6 +187,63 @@ export async function upsertContactLink(link: ContactLink): Promise<ContactLink>
   return row!;
 }
 
+/* ------------------------------ lid <-> telefone ------------------------- */
+
+/** Registra o par quando o WhatsApp entrega LID e telefone no mesmo evento. */
+export async function upsertLidLink(
+  tenantId: string,
+  waLid: string,
+  waPhoneJid: string,
+): Promise<void> {
+  await query(
+    `INSERT INTO lid_links (tenant_id, wa_lid, wa_phone_jid)
+       VALUES ($1,$2,$3)
+     ON CONFLICT (tenant_id, wa_lid) DO UPDATE SET wa_phone_jid = EXCLUDED.wa_phone_jid`,
+    [tenantId, waLid, waPhoneJid],
+  );
+}
+
+/** Telefone ja aprendido para um LID, quando o evento atual nao o traz. */
+export async function findPhoneForLid(tenantId: string, waLid: string): Promise<string | null> {
+  const row = await queryOne<{ wa_phone_jid: string }>(
+    'SELECT wa_phone_jid FROM lid_links WHERE tenant_id = $1 AND wa_lid = $2',
+    [tenantId, waLid],
+  );
+  return row?.wa_phone_jid ?? null;
+}
+
+/**
+ * Move o vinculo de contato do LID para o JID de telefone, agora que ele e
+ * conhecido. Sem isso o mesmo contato existiria duas vezes no Chatwoot: uma
+ * sob a identidade LID e outra sob a de telefone.
+ */
+export async function rekeyContactLink(
+  tenantId: string,
+  deJid: string,
+  paraJid: string,
+): Promise<boolean> {
+  const rows = await query(
+    `UPDATE contact_links SET wa_jid = $3, updated_at = now()
+       WHERE tenant_id = $1 AND wa_jid = $2
+         AND NOT EXISTS (
+           SELECT 1 FROM contact_links c2 WHERE c2.tenant_id = $1 AND c2.wa_jid = $3
+         )
+     RETURNING id`,
+    [tenantId, deJid, paraJid],
+  );
+  if (rows.length) {
+    await query(
+      `UPDATE conversation_links SET wa_jid = $3, updated_at = now()
+         WHERE tenant_id = $1 AND wa_jid = $2
+           AND NOT EXISTS (
+             SELECT 1 FROM conversation_links c2 WHERE c2.tenant_id = $1 AND c2.wa_jid = $3
+           )`,
+      [tenantId, deJid, paraJid],
+    );
+  }
+  return rows.length > 0;
+}
+
 export async function dropContactLink(tenantId: string, waJid: string): Promise<void> {
   await query('DELETE FROM contact_links WHERE tenant_id = $1 AND wa_jid = $2', [tenantId, waJid]);
 }

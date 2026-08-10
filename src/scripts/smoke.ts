@@ -102,6 +102,26 @@ check('enderecamento por LID: prefere o telefone de SenderAlt', () => {
   assert.equal(ev.text, 'Opa! Teste de api');
 });
 
+check('evento com LID e telefone expoe o par para ser aprendido', () => {
+  const ev = normalizeWuzapiEvent({
+    type: 'Message',
+    event: {
+      Info: {
+        Chat: '14010837663788@lid',
+        Sender: '14010837663788@lid',
+        SenderAlt: '5511987654321@s.whatsapp.net',
+        ID: 'PAR1',
+        IsFromMe: false,
+      },
+      Message: { conversation: 'oi' },
+    },
+  });
+  // O par (chatLid, chatJid) e o que alimenta a tabela lid_links.
+  assert.equal(ev?.chatLid, '14010837663788@lid');
+  assert.equal(ev?.chatJid, '5511987654321@s.whatsapp.net');
+  assert.equal(jidToE164(ev!.chatJid), '+5511987654321', 'telefone disponivel para o Chatwoot');
+});
+
 check('LID sem alternativo: mantem o LID em vez de perder o remetente', () => {
   const ev = normalizeWuzapiEvent({
     type: 'Message',

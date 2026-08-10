@@ -101,4 +101,20 @@ export const migrations: Migration[] = [
         ADD COLUMN IF NOT EXISTS wa_sender_jid text;
     `,
   },
+  {
+    name: '004_lid_links',
+    sql: /* sql */ `
+      -- Par LID <-> JID de telefone, aprendido quando o WhatsApp entrega os
+      -- dois no mesmo evento (SenderAlt / RecipientAlt). Depois disso o
+      -- telefone fica conhecido mesmo em eventos que so trazem o LID.
+      CREATE TABLE IF NOT EXISTS lid_links (
+        id            bigserial PRIMARY KEY,
+        tenant_id     uuid NOT NULL REFERENCES tenants(id) ON DELETE CASCADE,
+        wa_lid        text NOT NULL,
+        wa_phone_jid  text NOT NULL,
+        created_at    timestamptz NOT NULL DEFAULT now(),
+        UNIQUE (tenant_id, wa_lid)
+      );
+    `,
+  },
 ];

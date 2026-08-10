@@ -62,9 +62,28 @@ export async function resolveContact(
     // Nome do WhatsApp pode ter mudado depois do primeiro contato.
     const novoNome = displayName?.trim() || nomeCorrigido;
 
-    if (novoNome && novoNome !== cached.display_name) {
-      await cw.updateContact(cached.chatwoot_contact_id, { name: novoNome });
-      await upsertContactLink({ ...cached, display_name: novoNome });
+    const patch: Record<string, unknown> = {};
+    if (novoNome && novoNome !== cached.display_name) patch['name'] = novoNome;
+
+    // O contato pode ter nascido sob identidade LID, sem telefone. Se o
+    // numero foi aprendido depois, completa o cadastro em vez de deixar o
+    // contato para sempre sem telefone.
+    const telefone = isGroup ? null : jidToE164(waJid);
+    if (telefone) {
+      const atual = await cw.getContact(cached.chatwoot_contact_id);
+      if (atual && !atual.phone_number) {
+        patch['phone_number'] = telefone;
+        patch['identifier'] = identifierFor(waJid);
+        logger.info(
+          { tenant: tenant.slug, contactId: cached.chatwoot_contact_id, telefone },
+          'telefone descoberto depois: completando o contato',
+        );
+      }
+    }
+
+    if (Object.keys(patch).length) {
+      await cw.updateContact(cached.chatwoot_contact_id, patch);
+      await upsertContactLink({ ...cached, display_name: novoNome ?? cached.display_name });
     }
     return { contactId: cached.chatwoot_contact_id, sourceId: cached.source_id };
   }
