@@ -197,6 +197,56 @@ export class WuzapiClient {
 
   /* ------------------------------ contatos ----------------------------- */
 
+  /**
+   * Nome do contato na agenda do WhatsApp.
+   *
+   * Serve para quando a mensagem foi enviada POR NOS: o `PushName` do evento
+   * e o nome do dono da conta, entao a agenda e a unica fonte do nome de quem
+   * recebeu. A lista inteira e cacheada porque tem milhares de entradas e o
+   * WuzAPI nao oferece consulta por JID.
+   */
+  async contactName(jid: string): Promise<string | null> {
+    try {
+      const agenda = await this.contactsCached();
+      const alvo = agenda[jid];
+      if (alvo) return alvo;
+
+      // A agenda pode estar indexada por LID enquanto temos o JID de telefone.
+      const digitos = (jid.split('@')[0] ?? '').replace(/\D/g, '');
+      if (!digitos) return null;
+      for (const [chave, nome] of Object.entries(agenda)) {
+        if ((chave.split('@')[0] ?? '').replace(/\D/g, '') === digitos) return nome;
+      }
+      return null;
+    } catch {
+      return null;
+    }
+  }
+
+  private async contactsCached(): Promise<Record<string, string>> {
+    const agora = Date.now();
+    const cache = WuzapiClient.agendaCache.get(this.baseUrl + this.token);
+    if (cache && agora - cache.em < WuzapiClient.AGENDA_TTL_MS) return cache.dados;
+
+    const bruto = await this.call<Record<string, Record<string, unknown>>>('/user/contacts');
+    const dados: Record<string, string> = {};
+    for (const [jid, info] of Object.entries(bruto ?? {})) {
+      const nome =
+        (info?.['FullName'] as string) ||
+        (info?.['BusinessName'] as string) ||
+        (info?.['PushName'] as string) ||
+        (info?.['FirstName'] as string) ||
+        '';
+      if (nome.trim()) dados[jid] = nome.trim();
+    }
+
+    WuzapiClient.agendaCache.set(this.baseUrl + this.token, { em: agora, dados });
+    return dados;
+  }
+
+  private static readonly AGENDA_TTL_MS = 10 * 60 * 1000;
+  private static agendaCache = new Map<string, { em: number; dados: Record<string, string> }>();
+
   async avatarUrl(phone: string): Promise<string | null> {
     try {
       const res = await this.call<{ URL?: string; url?: string }>('/user/avatar', {

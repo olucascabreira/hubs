@@ -94,7 +94,9 @@ export async function handleInboundEvent(tenant: Tenant, body: unknown): Promise
   // Em grupo o "contato" do Chatwoot e o proprio grupo; o autor real vai no
   // prefixo do conteudo e em content_attributes.
   const contactJid = event.chatJid;
-  const displayName = event.isGroup ? null : event.pushName;
+  // Em mensagem enviada por nos, `PushName` e o nome do DONO da conta, nao o
+  // do destinatario. Usa-lo aqui batizaria o contato com o nome errado.
+  const displayName = event.isGroup || event.isFromMe ? null : event.pushName;
 
   // Contato e conversa podem ter sido apagados no Chatwoot depois que o
   // vinculo foi gravado aqui. Nesse caso o ID em cache aponta para nada e o

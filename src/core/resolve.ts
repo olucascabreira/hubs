@@ -77,7 +77,10 @@ export async function resolveContact(
       displayName?.trim() || (await wuz.groupName(waJid)) || `Grupo ${waJid.split('@')[0]}`;
     name = comSufixoDeGrupo(assunto);
   } else {
-    name = displayName?.trim() || jidToE164(waJid) || waJid;
+    // Sem PushName (tipicamente mensagem que nos enviamos), o nome vem da
+    // agenda do WhatsApp; so entao caímos no telefone.
+    name =
+      displayName?.trim() || (await wuz.contactName(waJid)) || jidToE164(waJid) || waJid;
   }
 
   const phone = isGroup ? undefined : (jidToE164(waJid) ?? undefined);
