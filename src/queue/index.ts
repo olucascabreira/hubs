@@ -55,6 +55,54 @@ export async function enqueueOutbound(tenantSlug: string, payload: unknown, jobI
   await outboundQueue.add('outbound', { tenantSlug, payload }, jobId ? { jobId } : undefined);
 }
 
+export interface JobFalho {
+  fila: 'entrada' | 'saida';
+  id: string;
+  tenant: string;
+  erro: string;
+  tentativas: number;
+  em: string;
+  resumo: string;
+}
+
+/**
+ * Jobs que falharam, com o motivo. Sem isto o diagnostico depende do log do
+ * conteiner, que nem sempre e legivel no orquestrador.
+ */
+export async function listarFalhas(limite = 20): Promise<JobFalho[]> {
+  const coletar = async (q: Queue<JobData>, fila: 'entrada' | 'saida') => {
+    const jobs = await q.getFailed(0, limite - 1);
+    return jobs.map((j) => {
+      const payload = j.data?.payload as Record<string, unknown> | undefined;
+      const conteudo = payload?.['content'];
+      return {
+        fila,
+        id: String(j.id ?? '?'),
+        tenant: j.data?.tenantSlug ?? '?',
+        erro: (j.failedReason ?? 'sem motivo registrado').slice(0, 400),
+        tentativas: j.attemptsMade,
+        em: new Date(j.timestamp).toISOString(),
+        resumo: typeof conteudo === 'string' ? conteudo.slice(0, 80) : '(sem texto)',
+      };
+    });
+  };
+
+  const [entrada, saida] = await Promise.all([
+    coletar(inboundQueue, 'entrada'),
+    coletar(outboundQueue, 'saida'),
+  ]);
+  return [...entrada, ...saida].sort((a, b) => b.em.localeCompare(a.em));
+}
+
+/** Reenfileira um job que falhou, apos a causa ter sido corrigida. */
+export async function repetirFalha(fila: 'entrada' | 'saida', id: string): Promise<boolean> {
+  const q = fila === 'entrada' ? inboundQueue : outboundQueue;
+  const job = await q.getJob(id);
+  if (!job) return false;
+  await job.retry();
+  return true;
+}
+
 async function loadTenant(slug: string) {
   const tenant = await getTenantBySlug(slug);
   if (!tenant) throw new Error(`Tenant ${slug} nao existe`);

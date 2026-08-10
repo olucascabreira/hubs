@@ -15,6 +15,7 @@ import {
 import { requireAdmin } from './security';
 import { captureStats, listCaptures } from '../core/capture';
 import { grupoPermitido } from '../core/inbound';
+import { listarFalhas, repetirFalha } from '../queue';
 import { isGroupJid, normalizeJid } from '../core/jid';
 
 const slugSchema = z
@@ -130,6 +131,26 @@ export async function adminRoutes(app: FastifyInstance): Promise<void> {
     default_chatwoot_base_url: config.DEFAULT_CHATWOOT_BASE_URL ?? '',
     default_wuzapi_events: config.defaultWuzapiEvents,
   }));
+
+  /** Jobs que falharam, com o motivo — evita depender do log do conteiner. */
+  app.get<{ Querystring: { limit?: string } }>('/admin/jobs/failed', async (req) => {
+    const limite = Math.min(Number(req.query.limit ?? 20) || 20, 100);
+    const falhas = await listarFalhas(limite);
+    return { total: falhas.length, falhas };
+  });
+
+  /** Reenfileira um job depois de corrigida a causa da falha. */
+  app.post<{ Params: { fila: string; id: string } }>(
+    '/admin/jobs/:fila/:id/retry',
+    async (req, reply) => {
+      const fila = req.params.fila === 'entrada' ? 'entrada' : req.params.fila === 'saida' ? 'saida' : null;
+      if (!fila) return reply.code(400).send({ error: 'fila deve ser "entrada" ou "saida"' });
+
+      const ok = await repetirFalha(fila, req.params.id);
+      if (!ok) return reply.code(404).send({ error: 'job nao encontrado' });
+      return { status: 'reenfileirado', fila, id: req.params.id };
+    },
+  );
 
   app.get('/admin/tenants', async () => {
     const tenants = await listTenants();
