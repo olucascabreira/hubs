@@ -46,6 +46,14 @@ const schema = z.object({
   // Sufixo no nome do contato de grupo, para distingui-lo de uma pessoa na
   // lista de conversas. Deixe vazio para nao acrescentar nada.
   GROUP_NAME_SUFFIX: z.string().default(' (Grupo)'),
+
+  // Reconciliacao periodica: reconecta sessao caida e regrava webhook
+  // divergente. O WuzAPI nao restabelece sessoes sozinho apos reiniciar.
+  WATCHDOG_ENABLED: z
+    .string()
+    .optional()
+    .transform((v) => v !== 'false' && v !== '0'),
+  WATCHDOG_INTERVAL_MS: z.coerce.number().int().min(60_000).default(5 * 60_000),
 });
 
 const parsed = schema.safeParse(process.env);

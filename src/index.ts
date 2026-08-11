@@ -4,6 +4,7 @@ import { runMigrations } from './db/migrate';
 import { pool } from './db/pool';
 import { buildServer, listen } from './server';
 import { connection, startWorkers } from './queue';
+import { startWatchdog, stopWatchdog } from './core/watchdog';
 
 async function main(): Promise<void> {
   const applied = await runMigrations();
@@ -11,6 +12,7 @@ async function main(): Promise<void> {
 
   const app = await buildServer();
   const workers = startWorkers();
+  startWatchdog();
 
   await listen(app);
   logger.info(
@@ -21,6 +23,7 @@ async function main(): Promise<void> {
   const shutdown = async (signal: string) => {
     logger.info({ signal }, 'encerrando');
     try {
+      stopWatchdog();
       await app.close();
       await Promise.all(workers.map((w) => w.close()));
       await connection.quit();

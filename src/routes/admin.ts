@@ -16,6 +16,7 @@ import { requireAdmin } from './security';
 import { captureStats, listCaptures } from '../core/capture';
 import { grupoPermitido } from '../core/inbound';
 import { diagnosticarSessao } from '../core/sessao';
+import { ultimoCicloWatchdog } from '../core/watchdog';
 import { listarFalhas, repetirFalha } from '../queue';
 import { isGroupJid, normalizeJid } from '../core/jid';
 
@@ -132,6 +133,16 @@ export async function adminRoutes(app: FastifyInstance): Promise<void> {
     default_chatwoot_base_url: config.DEFAULT_CHATWOOT_BASE_URL ?? '',
     default_wuzapi_events: config.defaultWuzapiEvents,
   }));
+
+  /** Ultimo ciclo de reconciliacao: o que foi verificado e o que foi reparado. */
+  app.get('/admin/watchdog', async () => {
+    const ciclo = ultimoCicloWatchdog();
+    return {
+      habilitado: config.WATCHDOG_ENABLED,
+      intervalo_ms: config.WATCHDOG_INTERVAL_MS,
+      ultimo_ciclo: ciclo ?? '(ainda nao rodou)',
+    };
+  });
 
   /** Jobs que falharam, com o motivo — evita depender do log do conteiner. */
   app.get<{ Querystring: { limit?: string } }>('/admin/jobs/failed', async (req) => {
